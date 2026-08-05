@@ -5,7 +5,8 @@
 ## 資産管理
 
 銀行・証券・現金などの資産の残高を記録し、純資産の推移を確認できる機能。
-`ui-z-cloud` の `src/features/payments` にある `NetWorthCard` / `NetWorthAreaChart` の
+`../ui-z-cloud/src/features/payments`（このリポジトリからの相対パス）にある
+`NetWorthCard` / `NetWorthAreaChart` の
 見た目・情報設計（現在値・前月比・24ヶ月推移を1カードにまとめる構成）を参考にできる。
 
 - 資産アカウント（銀行・証券・現金等）を登録できる。

@@ -3,7 +3,8 @@
 ## 1. 目的
 
 月次で収支を確認しながら、日々の家計簿をクイックに登録できるアプリを作る。
-`ui-z-cloud` の `src/features/payments`（資産ダッシュボード）の見た目・情報設計を一部参考にする。
+`../ui-z-cloud/src/features/payments`（このリポジトリからの相対パス。資産ダッシュボード）の
+見た目・情報設計を一部参考にする。
 一方でデータの持ち方は異なる: 手入力を主としつつ、既存銀行/カードの CSV・PDF もインポートでき、
 重複を防ぎながら同じデータベースに取り込む。すべてのデータ（取引・ジャンル・ユーザー）は
 DB で一元管理し、ファイル（JSON/CSV）を正データとしては持たない。ユーザーごとにサインアップし、
@@ -30,7 +31,7 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 - **マルチユーザー**
   - サインアップ/ログインし、各ユーザーは自分が登録・インポートしたデータのみ閲覧・編集できる。
 
-## 3. 参考にする既存実装（`ui-z-cloud/src/features/payments`）
+## 3. 参考にする既存実装（`../ui-z-cloud/src/features/payments`）
 
 流用する情報設計・視覚言語:
 
@@ -102,7 +103,7 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 ## 5. アーキテクチャ
 
 - Next.js App Router（既存の `next@16` / `react@19` 構成をそのまま利用）。
-- `src/features/kakei/` 配下に機能を集約（`ui-z-cloud` の `features/payments` に倣う）:
+- `src/features/kakei/` 配下に機能を集約（`../ui-z-cloud/src/features/payments` の構成に倣う）:
   - `components/` … 画面パーツ（Dashboard, PeriodSelector, CategoryBreakdown,
     TransactionForm, TransactionList, CategoryManager, ImportUploader 等）
   - `lib/` … 集計ロジック（月次サマリー・カテゴリ別内訳の view-model 算出）
@@ -115,7 +116,7 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 ## 6. UI 設計方針
 
 - shadcn/ui を導入し、`Card` / `Button` / `Input` / `Select` / `Dialog` / `Tabs` 等を利用する。
-- `ui-z-cloud` から Tailwind の CSS変数トークン（色・数値表示ユーティリティ）を移植し、視覚的な
+- `../ui-z-cloud/src/features/payments` から Tailwind の CSS変数トークン（色・数値表示ユーティリティ）を移植し、視覚的な
   一貫性を持たせる（配色は収入=緑系、支出=赤系などカテゴリの意味に応じて割り当て）。
 - レイアウトはカードベースのダッシュボード構成（月セレクター → サマリーカード群 → 一覧）。
 
