@@ -20,7 +20,10 @@ export async function signInWithGitHub(
   });
 
   if (error || !data.url) {
-    return { status: "error", message: error?.message ?? "ログインに失敗しました。" };
+    return {
+      status: "error",
+      message: error?.message ?? "ログインに失敗しました。",
+    };
   }
 
   redirect(data.url);
