@@ -55,6 +55,41 @@ export async function createTransaction(input: CreateTransactionInput) {
   revalidatePath("/");
 }
 
+export async function updateTransaction(
+  id: string,
+  input: CreateTransactionInput,
+) {
+  const { supabase, userId } = await getAuthedUserId();
+  if (input.categoryId) {
+    const { data: category, error: categoryError } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", input.categoryId)
+      .eq("user_id", userId)
+      .eq("type", input.type)
+      .maybeSingle();
+    if (categoryError) throw categoryError;
+    if (!category) throw new Error("選択したジャンルが見つかりません。");
+  }
+  const { data, error } = await supabase
+    .from("transactions")
+    .update({
+      date: input.date,
+      amount: input.amount,
+      type: input.type,
+      category_id: input.categoryId ?? null,
+      description: input.description ?? null,
+      memo: input.memo ?? null,
+    })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("取引が見つかりません。");
+  revalidatePath("/");
+}
+
 export async function deleteTransaction(id: string) {
   const { supabase, userId } = await getAuthedUserId();
   const { error } = await supabase
@@ -112,6 +147,56 @@ export async function createTransactionFromForm(
     return {
       status: "error",
       message: error instanceof Error ? error.message : "登録に失敗しました。",
+    };
+  }
+  return { status: "success" };
+}
+
+export async function updateTransactionFromForm(
+  _prevState: TransactionFormState,
+  formData: FormData,
+): Promise<TransactionFormState> {
+  const id = formData.get("id");
+  const date = formData.get("date");
+  const amountRaw = formData.get("amount");
+  const type = formData.get("type");
+  const categoryId = formData.get("categoryId");
+  const description = formData.get("description");
+  const memo = formData.get("memo");
+
+  if (typeof id !== "string" || id.length === 0) {
+    return { status: "error", message: "不正なリクエストです。" };
+  }
+  if (typeof date !== "string" || date.length === 0) {
+    return { status: "error", message: "日付を入力してください。" };
+  }
+  const amount = typeof amountRaw === "string" ? Number(amountRaw) : Number.NaN;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { status: "error", message: "金額を正しく入力してください。" };
+  }
+  if (type !== "income" && type !== "expense") {
+    return { status: "error", message: "種別を選択してください。" };
+  }
+
+  try {
+    await updateTransaction(id, {
+      date,
+      amount,
+      type,
+      categoryId:
+        typeof categoryId === "string" && categoryId.length > 0
+          ? categoryId
+          : undefined,
+      description:
+        typeof description === "string" && description.length > 0
+          ? description
+          : undefined,
+      memo: typeof memo === "string" && memo.length > 0 ? memo : undefined,
+    });
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "更新に失敗しました。",
     };
   }
   return { status: "success" };

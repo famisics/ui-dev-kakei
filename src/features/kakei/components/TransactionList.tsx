@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TransactionEditDialog } from "@/features/kakei/components/TransactionEditDialog";
 import type { Category, Transaction } from "@/features/kakei/db/types";
 import { formatYen } from "@/features/kakei/lib/format";
 import { cn } from "@/lib/utils";
@@ -57,15 +58,23 @@ export function TransactionList({
                       <Badge variant="outline">インポート</Badge>
                     )}
                   </div>
-                  <span
-                    className={cn(
-                      "mf-num tnum text-sm",
-                      t.type === "income" ? "text-success" : "text-destructive",
-                    )}
-                  >
-                    {t.type === "income" ? "+" : "-"}
-                    {formatYen(t.amount)}
-                  </span>
+                  <div className="flex items-center justify-between gap-2 sm:justify-end">
+                    <span
+                      className={cn(
+                        "mf-num tnum text-sm",
+                        t.type === "income"
+                          ? "text-success"
+                          : "text-destructive",
+                      )}
+                    >
+                      {t.type === "income" ? "+" : "-"}
+                      {formatYen(t.amount)}
+                    </span>
+                    <TransactionEditDialog
+                      transaction={t}
+                      categories={categories}
+                    />
+                  </div>
                 </li>
               );
             })}
