@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { CategoryType, Transaction } from "@/features/kakei/db/types";
 import { getAuthedUserId } from "@/lib/supabase/auth";
+import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
 
 function monthRange(yearMonth: string) {
   const [year, month] = yearMonth.split("-").map(Number);
@@ -71,6 +72,34 @@ export async function updateTransaction(
     if (categoryError) throw categoryError;
     if (!category) throw new Error("選択したジャンルが見つかりません。");
   }
+
+  const { data: current, error: currentError } = await supabase
+    .from("transactions")
+    .select("date, amount, type")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (currentError) throw currentError;
+  if (!current) throw new Error("取引が見つかりません。");
+
+  if (
+    current.date !== input.date ||
+    current.amount !== input.amount ||
+    current.type !== input.type
+  ) {
+    const { data: linkedEntry, error: linkedError } = await supabase
+      .from("statement_entries")
+      .select("id")
+      .eq("transaction_id", id)
+      .maybeSingle();
+    if (linkedError) throw linkedError;
+    if (linkedEntry) {
+      throw new Error(
+        "カード明細と紐付いた取引のため、日付・金額・種別は変更できません。",
+      );
+    }
+  }
+
   const { data, error } = await supabase
     .from("transactions")
     .update({
@@ -97,7 +126,14 @@ export async function deleteTransaction(id: string) {
     .delete()
     .eq("id", id)
     .eq("user_id", userId);
-  if (error) throw error;
+  if (error) {
+    if (error.code === POSTGRES_ERROR_CODE.FOREIGN_KEY_VIOLATION) {
+      throw new Error(
+        "カード明細と紐付いた取引のため削除できません。先に明細を削除してください。",
+      );
+    }
+    throw error;
+  }
   revalidatePath("/");
 }
 
