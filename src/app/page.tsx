@@ -1,65 +1,80 @@
-import Image from "next/image";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
+import { listCategories } from "@/features/kakei/actions/categories";
+import { listTransactionsForMonth } from "@/features/kakei/actions/transactions";
+import { CategoryBreakdown } from "@/features/kakei/components/CategoryBreakdown";
+import { MonthSelector } from "@/features/kakei/components/MonthSelector";
+import { QuickAddForm } from "@/features/kakei/components/QuickAddForm";
+import { SummaryCards } from "@/features/kakei/components/SummaryCards";
+import { TransactionFilters } from "@/features/kakei/components/TransactionFilters";
+import { TransactionList } from "@/features/kakei/components/TransactionList";
+import { currentYearMonth } from "@/features/kakei/lib/format";
+import {
+  categoryBreakdown,
+  monthlySummary,
+} from "@/features/kakei/lib/summary";
 
-export default function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; category?: string; type?: string }>;
+}) {
+  const params = await searchParams;
+  const month =
+    params.month && /^\d{4}-(0[1-9]|1[0-2])$/.test(params.month)
+      ? params.month
+      : currentYearMonth();
+
+  const [categories, transactions] = await Promise.all([
+    listCategories(),
+    listTransactionsForMonth(month),
+  ]);
+
+  const filteredTransactions = transactions.filter((t) => {
+    if (params.category && t.category_id !== params.category) return false;
+    if (params.type && t.type !== params.type) return false;
+    return true;
+  });
+
+  const summary = monthlySummary(transactions);
+  const expenseBreakdown = categoryBreakdown(
+    transactions.filter((t) => t.type === "expense"),
+    categories,
+  );
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">家計簿</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/import"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            インポート
+          </Link>
+          <Link
+            href="/categories"
+            className={buttonVariants({ variant: "outline" })}
+          >
+            ジャンル管理
+          </Link>
+          <QuickAddForm categories={categories} />
+        </div>
+      </div>
+
+      <MonthSelector month={month} />
+      <SummaryCards summary={summary} />
+      <CategoryBreakdown items={expenseBreakdown} />
+
+      <div className="flex flex-col gap-2">
+        <TransactionFilters categories={categories} />
+        <TransactionList
+          transactions={filteredTransactions}
+          categories={categories}
+          hasFilter={Boolean(params.category || params.type)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      </div>
     </div>
   );
 }
