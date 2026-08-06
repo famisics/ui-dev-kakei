@@ -1,5 +1,3 @@
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { listCategories } from "@/features/kakei/actions/categories";
 import { listTransactionsForMonth } from "@/features/kakei/actions/transactions";
 import { CategoryBreakdown } from "@/features/kakei/components/CategoryBreakdown";
@@ -46,21 +44,7 @@ export default async function Home({
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">家計簿</h1>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href="/import"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            インポート
-          </Link>
-          <Link
-            href="/categories"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            ジャンル管理
-          </Link>
-          <QuickAddForm categories={categories} />
-        </div>
+        <QuickAddForm categories={categories} />
       </div>
 
       <MonthSelector month={month} />
