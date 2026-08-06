@@ -26,6 +26,16 @@ npm run db:migrate:dry-run    # supabase db push --dry-run
 （`to authenticated` + `(select auth.uid()) = user_id`、更新ポリシーは `using` と
 `with check` の両方）を必ず設定する。
 
+デフォルトジャンル（`categories.is_default`）とその自動振り分けキーワード
+（`import_keywords`）は `src/consts/default-categories.ts` が正データで、アプリの
+UIからは編集できない（`protect_default_category` トリガーがDB側でも拒否する）。
+定義を変更したら以下を実行し、生成されたマイグレーションを `db:migrate` で適用する。
+
+```bash
+npm run generate:categories-migration   # src/consts/default-categories.ts から
+                                         # supabase/migrations/ にマイグレーションを追記生成
+```
+
 ## アーキテクチャ
 
 Next.js (App Router) + Supabase（Postgres + Auth、`@supabase/ssr`）の家計簿アプリ。
