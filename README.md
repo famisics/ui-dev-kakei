@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 家計簿アプリ
 
-## Getting Started
+日々の家計簿をクイックに登録しながら、月次で収支を確認できる個人〜家族向けの家計簿アプリ。
 
-First, run the development server:
+## 機能
+
+- **月次の収支確認**: 月セレクターで対象月を切り替え、収入・支出・差額のサマリー、ジャンル別支出の内訳、取引一覧（タイムライン）を表示する。
+- **クイック登録**: 日付・金額・種別（収入/支出）・ジャンル・メモを最小の手数で入力できる。
+- **ジャンル管理**: ジャンルを追加・編集・削除・並び替えできる。サインアップ時に基本的なジャンル（食費・日用品・交通費など）が自動で作成される。
+- **取引の確認**: 登録済みの取引を月単位で一覧表示し、ジャンル・種別で絞り込める。
+- **CSV/PDFインポート（カード明細）**: 対応カードの利用明細（CSV/PDF）をアップロードして取引として取り込む。ジャンル辞書によりキーワードから自動でジャンルを推定し、同じ取引を重複して取り込まない。取り込み前にプレビュー（新規/重複件数、推定ジャンル）を確認できる。
+- **マルチユーザー**: メールアドレスでサインアップ・ログインし、各ユーザーは自分が登録・インポートしたデータのみ閲覧・編集できる。
+
+すべてのデータ（取引・ジャンル・ユーザー）はデータベースで一元管理し、アップロードしたファイルを正データとしては保持しない。
+
+## 必要なもの
+
+- Node.js
+- パッケージマネージャー（`npm` / `pnpm` / `yarn` / `bun` のいずれか）
+- Postgresデータベースと認証機能を提供するサービス（[Supabase](https://supabase.com)）
+  - メール認証（Magic Link）を使用する
+
+## セットアップ
+
+1. 依存パッケージをインストールする。
+
+   ```bash
+   npm install
+   ```
+
+2. Supabaseプロジェクトを用意し、以下の環境変数を `.env.local` に設定する。
+
+   | 変数名 | 用途 |
+   | --- | --- |
+   | `NEXT_PUBLIC_SUPABASE_URL` | SupabaseプロジェクトのURL |
+   | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | クライアント/サーバー双方で使う公開キー |
+
+   [Vercel Marketplace](https://vercel.com/marketplace) 経由でSupabase連携をプロビジョニングする場合は、Vercelプロジェクトに連携するとこれらの環境変数が自動で設定される。
+
+3. データベースのマイグレーション（テーブル作成・Row Level Security・サインアップ時のデフォルトジャンル作成）を適用する。マイグレーションSQLはリポジトリ内のマイグレーション用ディレクトリにあり、SupabaseのSQL実行環境（ダッシュボードのSQL Editor、`psql`、Supabase CLI等）で流し込む。
+
+4. Supabase Auth の認証設定で、サインイン用のリダイレクトURL（アプリのオリジン + 認証コールバックのパス）をリダイレクト許可URLに追加する。未設定だとMagic Linkのメールリンクが機能しない。
+
+5. 開発サーバーを起動する。
+
+   ```bash
+   npm run dev
+   ```
+
+   [http://localhost:3000](http://localhost:3000) を開く。
+
+## テスト・型チェック
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm run test     # 単体テスト
+npm run lint     # 静的解析
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+TypeScriptの型チェックのみ行いたい場合は `tsc --noEmit` を使う（`.js` を生成しないこと）。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## デプロイ
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+[Vercel](https://vercel.com) へのデプロイを想定している。デプロイ先の環境変数にも上記のSupabase関連の値を設定すること。
 
-## Learn More
+## 将来の拡張（未対応）
 
-To learn more about Next.js, take a look at the following resources:
+- 資産（残高・純資産推移）の管理機能
+- 銀行口座のCSV/PDFインポート（現状はカード明細のみ対応）
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+詳細は `docs/todo.md` を参照。
