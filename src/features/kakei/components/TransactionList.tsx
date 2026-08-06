@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { TransactionDeleteButton } from "@/features/kakei/components/TransactionDeleteButton";
 import { TransactionEditDialog } from "@/features/kakei/components/TransactionEditDialog";
 import type { Category, Transaction } from "@/features/kakei/db/types";
 import { formatYen } from "@/features/kakei/lib/format";
@@ -74,6 +75,7 @@ export function TransactionList({
                       transaction={t}
                       categories={categories}
                     />
+                    <TransactionDeleteButton transactionId={t.id} />
                   </div>
                 </li>
               );
