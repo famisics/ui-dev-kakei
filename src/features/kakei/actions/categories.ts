@@ -48,6 +48,18 @@ export type UpdateCategoryInput = Partial<{
 
 export async function updateCategory(id: string, input: UpdateCategoryInput) {
   const { supabase, userId } = await getAuthedUserId();
+  const { data: category, error: categoryError } = await supabase
+    .from("categories")
+    .select("is_default")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (categoryError) throw categoryError;
+  if (!category) throw new Error("ジャンルが見つかりません。");
+  if (category.is_default) {
+    throw new Error("デフォルトのジャンルは編集できません。");
+  }
+
   const { error } = await supabase
     .from("categories")
     .update({

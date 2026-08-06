@@ -228,6 +228,12 @@ function CategoryRow({
           variant="ghost"
           size="sm"
           onClick={() => setEditing(true)}
+          disabled={category.is_default}
+          title={
+            category.is_default
+              ? "デフォルトのジャンルは編集できません"
+              : undefined
+          }
         >
           編集
         </Button>
