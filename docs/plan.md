@@ -88,18 +88,15 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 
 ### 4.3 テーブル設計
 
-- `accounts`: `id`, `user_id`, `name`, `kind`(card/cash), `color`, `sort_order`, `created_at`
-  — 手入力とインポートで共通して使う支払元。
 - `categories`: `id`, `user_id`, `name`, `type`(income/expense), `color`, `sort_order`,
   `is_default`, `parent_id`(nullable。親ジャンルの `categories.id`),
   `import_keywords`(text[], nullable。自動ジャンル判定用のキーワード。
   `sort_order` の昇順で先勝ち評価する), `created_at`
 - `import_sources`: `id`, `user_id`, `name`(表示名。ユーザーが変更できる。例: 「楽天カード」),
-  `account_id`(対応するカードの `accounts.id`),
   `format_key`(パーサー選択用の固定キー: `jcb` / `debit` / `rakuten` / `vpass`), `created_at`
   — インポート対象はカード明細のみ。
 - `transactions`: `id`, `user_id`, `date`, `amount`(常に正数), `type`(income/expense),
-  `account_id`(`accounts.id` を参照), `category_id`(nullable), `description`(nullable。インポート時の
+  `category_id`(nullable), `description`(nullable。インポート時の
   明細名または手入力した取引内容), `memo`(nullable。ユーザーが自由に追記するメモで
   `description` とは独立), `source`(manual/import), `created_at`
 - `statement_entries`: `id`, `user_id`, `import_source_id`, `transaction_id`, `entry_key`,

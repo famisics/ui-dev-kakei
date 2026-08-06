@@ -11,8 +11,7 @@
 
 ## 2. 用語
 
-- **アカウント**: 支払元。`card`（カード）または `cash`（現金）の種別を持つ。
-- **取込元**: カード会社ごとのファイル形式と、対応するカードアカウントの組み合わせ。
+- **取込元**: カード会社ごとのファイル形式の設定。
 - **取引**: 家計簿に表示・集計する収支。手入力またはインポートによって作成される。
 - **明細エントリー**: インポートファイルに含まれるカード明細1件。取引とは分けて保存し、
   対応する取引へ1対1で紐付ける。
@@ -23,32 +22,18 @@
 
 ## 3. データモデル
 
-### `accounts`
-
-カードと現金を共通の支払元として管理する。
-
-- `id uuid primary key`
-- `user_id uuid not null`
-- `name text not null`
-- `kind text not null check (kind in ('card', 'cash'))`
-- `color text nullable`
-- `sort_order integer not null`
-- `created_at timestamptz not null`
-
 ### `import_sources`
 
-既存の取込元に、対応するカードアカウントを追加する。
+既存の取込元をそのまま使う。
 
-- `account_id uuid not null references accounts(id)`
-- 1つの取込元は1つの `card` アカウントに属する。
-- 表示名の変更では `id` と `account_id` を変更しない。
+- 表示名の変更では `id` を変更しない。
 - 取込履歴がある取込元は削除せず、必要になった場合は無効化する。
 
 ### `transactions`
 
-既存の取引に支払元を追加する。
+既存の取引をそのまま使う。カード/現金といった支払元の区別は設けず、すべての手入力取引を
+カード明細の照合対象とする。
 
-- `account_id uuid not null references accounts(id)`
 - `source` は取引が最初に作成された経路を表す。
 - 手入力取引へカード明細を紐付けても `source = 'manual'` を維持する。
 - インポートから新規作成した取引は `source = 'import'` とする。
@@ -147,15 +132,13 @@ entry_key = SHA-256(import_source_id | fingerprint | occurrence)
 
 ### 5.1 候補条件
 
-未登録の明細エントリーについて、次の条件をすべて満たす取引を候補にする。
+未登録の明細エントリーについて、次の条件をすべて満たす取引を候補にする。カード/現金といった
+支払元の区別は設けないため、条件を満たすすべての手入力取引が候補になりうる。
 
 - 同じユーザーである。
-- 取込元に紐付くカードと `transactions.account_id` が一致する。
 - `date`、`amount`、`type` が一致する。
 - `source = 'manual'` である。
 - `statement_entries` がまだ紐付いていない。
-
-現金アカウントや別のカードの取引は候補にしない。
 
 ### 5.2 候補の決定
 
@@ -203,7 +186,7 @@ entry_key = SHA-256(import_source_id | fingerprint | occurrence)
 確定処理の直前に、登録済み判定と候補条件をサーバー側で再評価する。クライアントから渡された
 取引ID、ジャンルID、取込元IDは、認証ユーザーが所有する値か検証する。
 
-次の処理を1つのPostgresトランザクションで実行する。
+サーバーアクション内で次の処理を行を1件ずつ逐次実行する。
 
 1. 登録済みの `entry_key` をスキップする。
 2. 指定された手入力取引を条件付きで更新し、明細エントリーを紐付ける。
@@ -211,13 +194,12 @@ entry_key = SHA-256(import_source_id | fingerprint | occurrence)
 4. `statement_entries` を作成する。
 5. `import_batches` に結果を記録する。
 
-Supabaseからは `security invoker` のDatabase Functionを呼び出す。関数は `auth.uid()` を基準に
-所有権を検証し、RLSを適用したまま実行する。`statement_entries` の一意制約を最終防衛線とし、
-同じインポートを同時に確定しても重複を作らない。
+`statement_entries` の一意制約（`entry_key`、`transaction_id`）を最終防衛線とし、同じインポートを
+同時に確定した場合は一意制約違反となった行をスキップして扱う。
 
 ## 7. 編集と削除
 
-- 明細が紐付いた取引の日付・金額・種別・アカウントを変更すると明細との不整合が生じるため、
+- 明細が紐付いた取引の日付・金額・種別を変更すると明細との不整合が生じるため、
   通常の編集では変更できないようにする。
 - ジャンル、メモ、表示用の明細名は編集できる。
 - `statement_entries.transaction_id` は `on delete restrict` とし、明細が紐付いた取引を通常の
@@ -227,19 +209,18 @@ Supabaseからは `security invoker` のDatabase Functionを呼び出す。関�
 
 ## 8. セキュリティと整合性
 
-- `accounts` と `statement_entries` を含む公開スキーマの全テーブルでRLSを有効にする。
+- `statement_entries` を含む公開スキーマの全テーブルでRLSを有効にする。
 - ポリシーは `to authenticated` と `(select auth.uid()) = user_id` を組み合わせる。
 - 更新ポリシーには `using` と `with check` の両方を設定する。
-- 新しいテーブルとDatabase Functionには、`authenticated` に必要な権限を明示的に付与する。
-- `accounts`、`import_sources`、`transactions`、`statement_entries` の参照先が同じユーザーに
-  属することを、複合外部キーまたはDatabase Function内の検証で保証する。
+- 新しいテーブルには、`authenticated` に必要な権限を明示的に付与する。
+- `import_sources`、`transactions`、`statement_entries` の参照先が同じユーザーに
+  属することを、サーバーアクション内の検証で保証する。
 - `service_role` キーをクライアントへ公開しない。
 
 ## 9. 受け入れ条件
 
-- カードを指定して手入力した取引と明細が一致すると、取引数を増やさずに紐付く。
+- 手入力した取引と明細が一致すると、取引数を増やさずに紐付く。
 - 対応する手入力取引がない明細だけが新しい取引になる。
-- 現金または別カードの取引は候補にならない。
 - 月途中と月末の累積明細を順番に取り込むと、月末までに増えた明細だけが追加される。
 - 同じ累積明細を何度取り込んでも、取引と明細エントリーが増えない。
 - 同日・同額・同一明細名の取引が複数あっても、累積件数分を保持する。
