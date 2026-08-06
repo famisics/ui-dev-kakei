@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 
 const navigation = [
   { href: "/", label: "トップ" },
-  { href: "/import", label: "インポート" },
   { href: "/categories", label: "ジャンル管理" },
 ];
 

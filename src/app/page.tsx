@@ -1,6 +1,9 @@
 import { listCategories } from "@/features/kakei/actions/categories";
+import { listImportSources } from "@/features/kakei/actions/import";
 import { listTransactionsForMonth } from "@/features/kakei/actions/transactions";
 import { CategoryCashFlow } from "@/features/kakei/components/CategoryCashFlow";
+import { ImportSourceForm } from "@/features/kakei/components/ImportSourceForm";
+import { ImportUploader } from "@/features/kakei/components/ImportUploader";
 import { MonthSelector } from "@/features/kakei/components/MonthSelector";
 import { QuickAddForm } from "@/features/kakei/components/QuickAddForm";
 import { SummaryCards } from "@/features/kakei/components/SummaryCards";
@@ -20,9 +23,10 @@ export default async function Home({
       ? params.month
       : currentYearMonth();
 
-  const [categories, transactions] = await Promise.all([
+  const [categories, transactions, importSources] = await Promise.all([
     listCategories(),
     listTransactionsForMonth(month),
+    listImportSources(),
   ]);
 
   const filteredTransactions = transactions.filter((t) => {
@@ -53,6 +57,14 @@ export default async function Home({
           hasFilter={Boolean(params.category || params.type)}
         />
       </div>
+
+      <section className="mt-4 flex w-full max-w-2xl self-center flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xl font-semibold">インポート</h2>
+          <ImportSourceForm />
+        </div>
+        <ImportUploader importSources={importSources} categories={categories} />
+      </section>
     </div>
   );
 }

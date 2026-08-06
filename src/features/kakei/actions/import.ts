@@ -56,7 +56,7 @@ export async function createImportSource(input: {
     format_key: input.formatKey,
   });
   if (error) throw error;
-  revalidatePath("/import");
+  revalidatePath("/");
 }
 
 export type ImportSourceFormState = {
@@ -304,7 +304,6 @@ export async function confirmImport(
   if (batchError) throw batchError;
 
   revalidatePath("/");
-  revalidatePath("/import");
   return { insertedCount, skippedCount };
 }
 

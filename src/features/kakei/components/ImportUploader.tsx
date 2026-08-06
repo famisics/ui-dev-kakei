@@ -1,10 +1,16 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { Upload } from "lucide-react";
+import {
+  type DragEvent,
+  useActionState,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -36,6 +42,10 @@ export function ImportUploader({
     initialState,
   );
   const [confirming, setConfirming] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [fileName, setFileName] = useState("");
+  const formRef = useRef<HTMLFormElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmed, setConfirmed] = useState<{
     insertedCount: number;
     skippedCount: number;
@@ -71,6 +81,21 @@ export function ImportUploader({
     }
   }
 
+  function handleDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+
+    const file = event.dataTransfer.files[0];
+    if (!file || !fileInputRef.current || isPending) return;
+
+    const files = new DataTransfer();
+    files.items.add(file);
+    fileInputRef.current.files = files.files;
+    setFileName(file.name);
+    setConfirmed(null);
+    formRef.current?.requestSubmit();
+  }
+
   if (importSources.length === 0) {
     return (
       <Card size="sm">
@@ -91,14 +116,18 @@ export function ImportUploader({
         </CardHeader>
         <CardContent>
           <form
+            ref={formRef}
             action={formAction}
-            className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end"
-            onSubmit={() => setConfirmed(null)}
+            className="flex flex-col gap-3"
+            onSubmit={() => {
+              setFileName("");
+              setConfirmed(null);
+            }}
           >
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 sm:max-w-64">
               <Label htmlFor="importSourceId">取込元</Label>
               <Select value={sourceId} onValueChange={setSourceId}>
-                <SelectTrigger id="importSourceId" className="w-full sm:w-48">
+                <SelectTrigger id="importSourceId" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -111,18 +140,54 @@ export function ImportUploader({
               </Select>
               <input type="hidden" name="importSourceId" value={sourceId} />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="file">ファイル</Label>
-              <Input
-                id="file"
-                name="file"
-                type="file"
-                accept=".csv,.pdf"
-                required
-              />
-            </div>
-            <Button type="submit" disabled={isPending}>
-              プレビュー
+
+            <Label
+              htmlFor="file"
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={(event) => {
+                if (
+                  event.relatedTarget instanceof Node &&
+                  event.currentTarget.contains(event.relatedTarget)
+                ) {
+                  return;
+                }
+                setIsDragging(false);
+              }}
+              onDrop={handleDrop}
+              className={`flex min-h-36 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors ${
+                isDragging
+                  ? "border-primary bg-accent"
+                  : "border-border hover:border-ring hover:bg-accent/50"
+              }`}
+            >
+              <Upload className="size-6 text-muted-foreground" />
+              <span className="font-medium">
+                {isDragging
+                  ? "ここにドロップ"
+                  : "CSV・PDFファイルをドラッグ＆ドロップ"}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {fileName || "クリックしてファイルを選択することもできます"}
+              </span>
+            </Label>
+            <input
+              ref={fileInputRef}
+              id="file"
+              name="file"
+              type="file"
+              accept=".csv,.pdf"
+              required
+              className="sr-only"
+              onChange={(event) =>
+                setFileName(event.currentTarget.files?.[0]?.name ?? "")
+              }
+            />
+            <Button type="submit" disabled={isPending || !fileName}>
+              {isPending ? "プレビュー中..." : "プレビュー"}
             </Button>
           </form>
           {state.status === "error" && (
