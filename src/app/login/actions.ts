@@ -1,32 +1,27 @@
 "use server";
 
 import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 export type SignInState = {
-  status: "idle" | "success" | "error";
+  status: "idle" | "error";
   message?: string;
 };
 
-export async function signInWithMagicLink(
+export async function signInWithGitHub(
   _prevState: SignInState,
-  formData: FormData,
 ): Promise<SignInState> {
-  const email = formData.get("email");
-  if (typeof email !== "string" || email.length === 0) {
-    return { status: "error", message: "メールアドレスを入力してください。" };
-  }
-
   const origin = (await headers()).get("origin");
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: `${origin}/auth/callback` },
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: "github",
+    options: { redirectTo: `${origin}/auth/callback` },
   });
 
-  if (error) {
-    return { status: "error", message: error.message };
+  if (error || !data.url) {
+    return { status: "error", message: error?.message ?? "ログインに失敗しました。" };
   }
 
-  return { status: "success" };
+  redirect(data.url);
 }
