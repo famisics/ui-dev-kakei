@@ -13,7 +13,6 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 以下は本計画のスコープには含めず、将来の拡張として `docs/todo.md` に別途記載する:
 
 - 資産（残高・純資産推移）の管理機能。
-- 銀行口座（netbk・sbi・smtb 等）の CSV/PDF インポート。初期スコープはカード明細のインポートのみ。
 
 ## 2. 機能要件
 
@@ -47,14 +46,13 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 - `CategoriesCard` … カテゴリ別ドット・金額・構成比%・比率バーの一覧。
 - `Timeline` … 日付降順の取引一覧、種別/ジャンルでのフィルタ。
 - `Card` (shadcn/ui) をベースにした `size="sm"` の小さめカード、`Dot` などの装飾コンポーネント。
-- Tailwind v4 の CSS変数トークン（`--bank`, `--success`, `--destructive` 等の oklch カラー）、
+- Tailwind v4 の CSS変数トークン（`--success`, `--destructive` 等の oklch カラー）、
   `mf-num` / `tnum`（数値の等幅表示）ユーティリティ。
 
 流用する変換ロジック（考え方のみ。実装は作り直す）:
 
 - `data-source.json` の `converter` ごとのパース方針。初期スコープはカード/デビット明細のみのため
-  `jcb`・`debit`・`rakuten`・`vpass` の CSV/PDF フォーマット差異への対応を対象とする
-  （`netbk`・`sbi`・`smtb_main` 等の銀行口座 CSV/PDF は `docs/todo.md` に回す）。
+  `jcb`・`debit`・`rakuten`・`vpass` の CSV/PDF フォーマット差異への対応を対象とする。
 - `card-dictionary.json` によるジャンル自動判定（キーワード部分一致・先勝ち・表記正規化）。
 
 流用しないもの:
@@ -62,8 +60,6 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 - ファイル（`raw/` + `manual.json` + `data.json`）を正データとする構成。本アプリは DB が正データ。
 - `pdftotext`（poppler）への外部コマンド依存。Vercel Functions 上で確実に動かすため、PDF テキスト
   抽出は Node 単体で動く JS ライブラリ（`unpdf` 等）を使う。
-- 銀行 ledger の自動振替判定・異常検知（`rules.json` 相当のロジック）は初期スコープに含めない
-  （将来の拡張候補）。
 
 ## 4. マルチユーザー・データベース
 
@@ -101,7 +97,7 @@ DB で一元管理し、ファイル（JSON/CSV）を正データとしては持
 - `import_sources`: `id`, `user_id`, `name`(表示名。ユーザーが変更できる。例: 「楽天カード」),
   `account_id`(対応するカードの `accounts.id`),
   `format_key`(パーサー選択用の固定キー: `jcb` / `debit` / `rakuten` / `vpass`), `created_at`
-  — インポート対象は初期スコープではカードのみ。銀行口座インポートは `docs/todo.md` を参照。
+  — インポート対象はカード明細のみ。
 - `transactions`: `id`, `user_id`, `date`, `amount`(常に正数), `type`(income/expense),
   `account_id`(`accounts.id` を参照), `category_id`(nullable), `description`(nullable。インポート時の
   明細名または手入力した取引内容), `memo`(nullable。ユーザーが自由に追記するメモで
