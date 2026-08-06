@@ -326,6 +326,7 @@ export type ConfirmImportResult = {
   matchedCount: number;
   createdCount: number;
   duplicateCount: number;
+  reclassifiedCount: number;
 };
 
 export async function confirmImport(
@@ -346,7 +347,7 @@ export async function confirmImport(
       .eq("id", importSourceId)
       .eq("user_id", userId)
       .single(),
-    supabase.from("categories").select("id").eq("user_id", userId),
+    supabase.from("categories").select("*").eq("user_id", userId),
   ]);
   if (sourceError || !source) throw new Error("取込元が見つかりません");
   if (categoriesError) throw categoriesError;
@@ -504,8 +505,62 @@ export async function confirmImport(
   });
   if (batchError) throw batchError;
 
+  const reclassifiedCount = await reclassifyUncategorizedImports(
+    supabase,
+    userId,
+    importSourceId,
+    categories,
+  );
+
   revalidatePath("/");
-  return { matchedCount, createdCount, duplicateCount };
+  return { matchedCount, createdCount, duplicateCount, reclassifiedCount };
+}
+
+/**
+ * 同じ取込元を再取込みした際、辞書が更新されて未分類の過去分が分類できるようになっているものを遡って分類する。
+ * ユーザーが手動で外した（category_id を null に戻した）ものと区別できないため、未分類のもののみ対象にする。
+ */
+async function reclassifyUncategorizedImports(
+  supabase: Awaited<ReturnType<typeof getAuthedUserId>>["supabase"],
+  userId: string,
+  importSourceId: string,
+  categories: Category[],
+): Promise<number> {
+  const dictionariesByType = {
+    income: normalizeDictionary(
+      buildDictionary(categories.filter((c) => c.type === "income")),
+    ),
+    expense: normalizeDictionary(
+      buildDictionary(categories.filter((c) => c.type === "expense")),
+    ),
+  };
+
+  const { data: uncategorized, error: uncategorizedError } = await supabase
+    .from("transactions")
+    .select("id, type, description")
+    .eq("user_id", userId)
+    .eq("import_source_id", importSourceId)
+    .is("category_id", null);
+  if (uncategorizedError) throw uncategorizedError;
+
+  let reclassifiedCount = 0;
+  for (const transaction of uncategorized) {
+    if (!transaction.description) continue;
+    const categoryId = resolveGenre(
+      transaction.description,
+      dictionariesByType[transaction.type],
+    );
+    if (!categoryId) continue;
+    const { error: updateError } = await supabase
+      .from("transactions")
+      .update({ category_id: categoryId })
+      .eq("id", transaction.id)
+      .eq("user_id", userId)
+      .is("category_id", null);
+    if (updateError) throw updateError;
+    reclassifiedCount++;
+  }
+  return reclassifiedCount;
 }
 
 export type ImportPreviewFormState = {
