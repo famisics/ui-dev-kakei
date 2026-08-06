@@ -37,7 +37,7 @@
 
    [Vercel Marketplace](https://vercel.com/marketplace) 経由でSupabase連携をプロビジョニングする場合は、Vercelプロジェクトに連携するとこれらの環境変数が自動で設定される。
 
-3. データベースのマイグレーション（テーブル作成・Row Level Security・サインアップ時のデフォルトジャンル作成）を適用する。マイグレーションSQLはリポジトリ内のマイグレーション用ディレクトリにあり、SupabaseのSQL実行環境（ダッシュボードのSQL Editor、`psql`、Supabase CLI等）で流し込む。
+3. データベースのマイグレーション（テーブル作成・Row Level Security・サインアップ時のデフォルトジャンル作成）を適用する。マイグレーションSQLはリポジトリ内のマイグレーション用ディレクトリにあり、SupabaseのSQL実行環境（ダッシュボードのSQL Editor、`psql`、Supabase CLI等）で流し込む。`supabase link` 済みであれば `npm run db:migrate`（内部で `supabase db push` を実行）でも適用できる。
 
 4. Supabase Auth の認証設定で、サインイン用のリダイレクトURL（アプリのオリジン + 認証コールバックのパス）をリダイレクト許可URLに追加する。未設定だとMagic Linkのメールリンクが機能しない。
 
