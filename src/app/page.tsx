@@ -1,16 +1,13 @@
 import { listCategories } from "@/features/kakei/actions/categories";
 import { listTransactionsForMonth } from "@/features/kakei/actions/transactions";
-import { CategoryBreakdown } from "@/features/kakei/components/CategoryBreakdown";
+import { CategoryCashFlow } from "@/features/kakei/components/CategoryCashFlow";
 import { MonthSelector } from "@/features/kakei/components/MonthSelector";
 import { QuickAddForm } from "@/features/kakei/components/QuickAddForm";
 import { SummaryCards } from "@/features/kakei/components/SummaryCards";
 import { TransactionFilters } from "@/features/kakei/components/TransactionFilters";
 import { TransactionList } from "@/features/kakei/components/TransactionList";
 import { currentYearMonth } from "@/features/kakei/lib/format";
-import {
-  categoryBreakdown,
-  monthlySummary,
-} from "@/features/kakei/lib/summary";
+import { categoryCashFlow, monthlySummary } from "@/features/kakei/lib/summary";
 
 export default async function Home({
   searchParams,
@@ -35,13 +32,10 @@ export default async function Home({
   });
 
   const summary = monthlySummary(transactions);
-  const expenseBreakdown = categoryBreakdown(
-    transactions.filter((t) => t.type === "expense"),
-    categories,
-  );
+  const cashFlow = categoryCashFlow(transactions, categories);
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-4 py-8">
+    <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-8">
       <div className="flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">家計簿</h1>
         <QuickAddForm categories={categories} />
@@ -49,7 +43,7 @@ export default async function Home({
 
       <MonthSelector month={month} />
       <SummaryCards summary={summary} />
-      <CategoryBreakdown items={expenseBreakdown} />
+      <CategoryCashFlow flow={cashFlow} />
 
       <div className="flex flex-col gap-2">
         <TransactionFilters categories={categories} />

@@ -16,48 +16,128 @@ export function monthlySummary(transactions: Transaction[]): MonthlySummary {
   return { income, expense, balance: income - expense };
 }
 
-export type CategoryBreakdownItem = {
+export type CashFlowCategory = {
   categoryId: string;
   name: string;
-  color: string | null;
   type: Category["type"];
+  total: number;
+  ratio: number;
+  children: CashFlowCategoryItem[];
+};
+
+export type CashFlowCategoryItem = {
+  categoryId: string;
+  name: string;
   total: number;
   ratio: number;
 };
 
-export function categoryBreakdown(
+export type CategoryCashFlow = {
+  income: CashFlowCategory[];
+  expense: CashFlowCategory[];
+  incomeTotal: number;
+  expenseTotal: number;
+};
+
+type CategoryTotal = {
+  category: Category | null;
+  total: number;
+};
+
+export function categoryCashFlow(
   transactions: Transaction[],
   categories: Category[],
-): CategoryBreakdownItem[] {
+): CategoryCashFlow {
   const categoryById = new Map(categories.map((c) => [c.id, c]));
-  const totalsByCategory = new Map<string, number>();
+  const totalsByType = {
+    income: new Map<string, CategoryTotal>(),
+    expense: new Map<string, CategoryTotal>(),
+  } satisfies Record<Category["type"], Map<string, CategoryTotal>>;
 
   for (const t of transactions) {
-    if (!t.category_id) continue;
-    totalsByCategory.set(
-      t.category_id,
-      (totalsByCategory.get(t.category_id) ?? 0) + t.amount,
-    );
-  }
-
-  const grandTotal = [...totalsByCategory.values()].reduce(
-    (sum, total) => sum + total,
-    0,
-  );
-
-  const items: CategoryBreakdownItem[] = [];
-  for (const [categoryId, total] of totalsByCategory) {
-    const category = categoryById.get(categoryId);
-    if (!category) continue;
-    items.push({
-      categoryId,
-      name: category.name,
-      color: category.color,
-      type: category.type,
-      total,
-      ratio: grandTotal > 0 ? total / grandTotal : 0,
+    const category = t.category_id
+      ? (categoryById.get(t.category_id) ?? null)
+      : null;
+    const key = category?.id ?? `unclassified-${t.type}`;
+    const current = totalsByType[t.type].get(key);
+    totalsByType[t.type].set(key, {
+      category,
+      total: (current?.total ?? 0) + t.amount,
     });
   }
 
-  return items.sort((a, b) => b.total - a.total);
+  const buildGroups = (type: Category["type"]) => {
+    const totals = totalsByType[type];
+    const grandTotal = [...totals.values()].reduce(
+      (sum, item) => sum + item.total,
+      0,
+    );
+    const groups = new Map<
+      string,
+      Omit<CashFlowCategory, "ratio"> & { directTotal: number }
+    >();
+
+    for (const [categoryId, item] of totals) {
+      const parent = item.category?.parent_id
+        ? categoryById.get(item.category.parent_id)
+        : item.category;
+      const parentId = parent?.id ?? `unclassified-${type}`;
+      const group = groups.get(parentId) ?? {
+        categoryId: parentId,
+        name: parent?.name ?? "未分類",
+        type,
+        total: 0,
+        directTotal: 0,
+        children: [],
+      };
+
+      group.total += item.total;
+      if (item.category?.parent_id && parent) {
+        group.children.push({
+          categoryId,
+          name: item.category.name,
+          total: item.total,
+          ratio: grandTotal > 0 ? item.total / grandTotal : 0,
+        });
+      } else {
+        group.directTotal += item.total;
+      }
+      groups.set(parentId, group);
+    }
+
+    const result = [...groups.values()].map(
+      ({ directTotal, ...group }): CashFlowCategory => ({
+        ...group,
+        ratio: grandTotal > 0 ? group.total / grandTotal : 0,
+        children: [
+          ...group.children,
+          ...(directTotal > 0
+            ? [
+                {
+                  categoryId: `${group.categoryId}-direct`,
+                  name: group.name === "未分類" ? "未分類" : "その他",
+                  total: directTotal,
+                  ratio: grandTotal > 0 ? directTotal / grandTotal : 0,
+                },
+              ]
+            : []),
+        ].sort((a, b) => b.total - a.total),
+      }),
+    );
+
+    return {
+      groups: result.sort((a, b) => b.total - a.total),
+      total: grandTotal,
+    };
+  };
+
+  const income = buildGroups("income");
+  const expense = buildGroups("expense");
+
+  return {
+    income: income.groups,
+    expense: expense.groups,
+    incomeTotal: income.total,
+    expenseTotal: expense.total,
+  };
 }
