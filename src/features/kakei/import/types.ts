@@ -3,6 +3,7 @@ export type ParsedTransaction = {
   description: string;
   amount: number;
   type: "income" | "expense";
+  externalId?: string;
 };
 
 export type CardParser = (
