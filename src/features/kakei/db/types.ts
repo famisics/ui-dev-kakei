@@ -11,6 +11,7 @@ export type Category = {
   color: string | null;
   sort_order: number;
   is_default: boolean;
+  parent_id: string | null;
   import_keywords: string[] | null;
   created_at: string;
 };

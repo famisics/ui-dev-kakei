@@ -19,6 +19,7 @@ export type CreateCategoryInput = {
   name: string;
   type: CategoryType;
   color?: string;
+  parentId?: string;
   importKeywords?: string[];
 };
 
@@ -29,6 +30,7 @@ export async function createCategory(input: CreateCategoryInput) {
     name: input.name,
     type: input.type,
     color: input.color ?? null,
+    parent_id: input.parentId ?? null,
     import_keywords: input.importKeywords ?? null,
   });
   if (error) throw error;
@@ -40,6 +42,7 @@ export type UpdateCategoryInput = Partial<{
   name: string;
   type: CategoryType;
   color: string | null;
+  parentId: string | null;
   importKeywords: string[] | null;
 }>;
 
@@ -51,6 +54,7 @@ export async function updateCategory(id: string, input: UpdateCategoryInput) {
       ...(input.name !== undefined && { name: input.name }),
       ...(input.type !== undefined && { type: input.type }),
       ...(input.color !== undefined && { color: input.color }),
+      ...(input.parentId !== undefined && { parent_id: input.parentId }),
       ...(input.importKeywords !== undefined && {
         import_keywords: input.importKeywords,
       }),
@@ -64,6 +68,18 @@ export async function updateCategory(id: string, input: UpdateCategoryInput) {
 
 export async function deleteCategory(id: string) {
   const { supabase, userId } = await getAuthedUserId();
+  const { data: category, error: categoryError } = await supabase
+    .from("categories")
+    .select("is_default")
+    .eq("id", id)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (categoryError) throw categoryError;
+  if (!category) throw new Error("ジャンルが見つかりません。");
+  if (category.is_default) {
+    throw new Error("デフォルトのジャンルは削除できません。");
+  }
+
   const { error } = await supabase
     .from("categories")
     .delete()
@@ -104,6 +120,7 @@ export async function createCategoryFromForm(
   const name = formData.get("name");
   const type = formData.get("type");
   const color = formData.get("color");
+  const parentId = formData.get("parentId");
   if (typeof name !== "string" || name.trim().length === 0) {
     return { status: "error", message: "ジャンル名を入力してください。" };
   }
@@ -115,6 +132,10 @@ export async function createCategoryFromForm(
       name: name.trim(),
       type,
       color: typeof color === "string" && color.length > 0 ? color : undefined,
+      parentId:
+        typeof parentId === "string" && parentId.length > 0
+          ? parentId
+          : undefined,
     });
   } catch (error) {
     return {
@@ -133,6 +154,7 @@ export async function updateCategoryFromForm(
   const name = formData.get("name");
   const type = formData.get("type");
   const color = formData.get("color");
+  const parentId = formData.get("parentId");
   if (typeof id !== "string" || id.length === 0) {
     return { status: "error", message: "不正なリクエストです。" };
   }
@@ -152,6 +174,8 @@ export async function updateCategoryFromForm(
             ? color
             : null
           : undefined,
+      parentId:
+        typeof parentId === "string" && parentId.length > 0 ? parentId : null,
     });
   } catch (error) {
     return {
