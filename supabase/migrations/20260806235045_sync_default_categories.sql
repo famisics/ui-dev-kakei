@@ -11,7 +11,7 @@ insert into public.categories (
 )
 select u.id, '生活費', 'expense', '#22c55e', 0, true, 'living'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -23,7 +23,7 @@ insert into public.categories (
 )
 select u.id, '娯楽', 'expense', '#ef4444', 1, true, 'entertainment'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -35,7 +35,7 @@ insert into public.categories (
 )
 select u.id, 'その他', 'expense', '#eab308', 2, true, 'other_expense'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -47,7 +47,7 @@ insert into public.categories (
 )
 select u.id, '給与', 'income', null, 0, true, 'salary'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -59,7 +59,7 @@ insert into public.categories (
 )
 select u.id, '仕送り', 'income', null, 1, true, 'remittance'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -71,7 +71,7 @@ insert into public.categories (
 )
 select u.id, '臨時収入', 'income', null, 2, true, 'windfall'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -85,7 +85,7 @@ select u.id, '外食費', 'expense', '#22c55e', 0, true, 'dining_out', p.id, arr
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -100,7 +100,7 @@ select u.id, '日用品', 'expense', '#22c55e', 1, true, 'daily_goods', p.id, ar
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -115,7 +115,7 @@ select u.id, '交通費', 'expense', '#22c55e', 2, true, 'transportation', p.id,
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -130,7 +130,7 @@ select u.id, '温泉', 'expense', '#22c55e', 3, true, 'hot_spring', p.id, array[
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -145,7 +145,7 @@ select u.id, '光熱費・通信費', 'expense', '#22c55e', 4, true, 'utilities_
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -160,7 +160,7 @@ select u.id, '医療', 'expense', '#22c55e', 5, true, 'medical', p.id, array['�
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'living'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -175,7 +175,7 @@ select u.id, 'サブスク', 'expense', '#ef4444', 0, true, 'subscription', p.id
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'entertainment'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -190,7 +190,7 @@ select u.id, '旅行', 'expense', '#ef4444', 1, true, 'travel', p.id, array['JAL
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = 'entertainment'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,

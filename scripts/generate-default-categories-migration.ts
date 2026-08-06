@@ -91,7 +91,7 @@ function buildReconciliationSql(
 )
 select u.id, '${escapeSqlString(def.name)}', '${def.type}', ${sqlNullableString(def.color)}, ${def.sortOrder}, true, '${def.key}'
 from auth.users u
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
@@ -105,7 +105,7 @@ select u.id, '${escapeSqlString(def.name)}', '${def.type}', ${sqlNullableString(
 from auth.users u
 join public.categories p
   on p.user_id = u.id and p.default_key = '${def.parentKey}'
-on conflict (user_id, default_key) do update set
+on conflict (user_id, default_key) where default_key is not null do update set
   name = excluded.name,
   type = excluded.type,
   color = excluded.color,
