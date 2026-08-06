@@ -271,7 +271,7 @@ export function ImportUploader({
               </p>
             ) : importableCount === 0 ? (
               <p className="text-sm text-muted-foreground">
-                すべて登録済みのため、新規に取り込む取引はありません。
+                すべて登録済みのため、新規に取り込む取引はありません。「この内容で取り込む」を押すと、過去に未分類だったものの再分類のみ確認します。
               </p>
             ) : (
               <ul className="flex flex-col gap-2">
@@ -345,13 +345,15 @@ export function ImportUploader({
                 {confirmed.createdCount}
                 件を取り込みました（登録済みスキップ {confirmed.duplicateCount}
                 件）。
+                {confirmed.reclassifiedCount > 0 &&
+                  ` 過去に未分類だった${confirmed.reclassifiedCount}件をジャンル分けしました。`}
               </p>
             ) : (
               <Button
                 onClick={handleConfirm}
                 disabled={
                   confirming ||
-                  importableCount === 0 ||
+                  state.result.rows.length === 0 ||
                   unresolvedAmbiguousCount > 0
                 }
                 className="self-start"
