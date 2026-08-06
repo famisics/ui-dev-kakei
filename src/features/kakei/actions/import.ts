@@ -12,13 +12,22 @@ import {
   normalizeDictionary,
   resolveGenre,
 } from "@/features/kakei/import/genre-dictionary";
-import { computeImportHash } from "@/features/kakei/import/hash";
+import {
+  computeEntryKey,
+  computeFingerprint,
+} from "@/features/kakei/import/hash";
+import type { ManualTransactionCandidate } from "@/features/kakei/import/matching";
+import {
+  assignOccurrences,
+  findCandidates,
+} from "@/features/kakei/import/matching";
 import { parseDebit } from "@/features/kakei/import/parsers/debit";
 import { parseJcb } from "@/features/kakei/import/parsers/jcb";
 import { parseRakuten } from "@/features/kakei/import/parsers/rakuten";
 import { parseVpass } from "@/features/kakei/import/parsers/vpass";
 import type { CardParser } from "@/features/kakei/import/types";
 import { getAuthedUserId } from "@/lib/supabase/auth";
+import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
 
 const PARSERS: Record<ImportFormatKey, CardParser> = {
   jcb: parseJcb,
@@ -100,20 +109,28 @@ export async function createImportSourceFromForm(
   return { status: "success" };
 }
 
+export type ImportRowStatus = "registered" | "link" | "new" | "ambiguous";
+
 export type ImportPreviewRow = {
   date: string;
   description: string;
   amount: number;
   type: "income" | "expense";
   categoryId: string | null;
-  hash: string;
-  isDuplicate: boolean;
+  fingerprint: string;
+  occurrence: number;
+  status: ImportRowStatus;
+  linkedTransactionId: string | null;
+  candidates: ManualTransactionCandidate[];
 };
 
 export type ImportPreviewResult = {
   rows: ImportPreviewRow[];
+  registeredCount: number;
+  linkCount: number;
   newCount: number;
-  duplicateCount: number;
+  ambiguousCount: number;
+  decreasedFingerprintCount: number;
   fileName: string;
   importSourceId: string;
 };
@@ -122,6 +139,30 @@ function buildDictionary(categories: Category[]): GenreDictionaryEntry[] {
   return categories
     .filter((c) => c.import_keywords && c.import_keywords.length > 0)
     .map((c) => ({ genre: c.id, keywords: c.import_keywords as string[] }));
+}
+
+async function fetchUnlinkedManualTransactions(
+  supabase: Awaited<ReturnType<typeof getAuthedUserId>>["supabase"],
+  userId: string,
+): Promise<ManualTransactionCandidate[]> {
+  const [
+    { data: manual, error: manualError },
+    { data: linked, error: linkedError },
+  ] = await Promise.all([
+    supabase
+      .from("transactions")
+      .select("id, date, amount, type, description, memo")
+      .eq("user_id", userId)
+      .eq("source", "manual"),
+    supabase
+      .from("statement_entries")
+      .select("transaction_id")
+      .eq("user_id", userId),
+  ]);
+  if (manualError) throw manualError;
+  if (linkedError) throw linkedError;
+  const linkedIds = new Set(linked.map((e) => e.transaction_id));
+  return manual.filter((t) => !linkedIds.has(t.id));
 }
 
 export async function previewImport(
@@ -152,6 +193,46 @@ export async function previewImport(
 
   const parsed = await PARSERS[source.format_key](fileBuffer);
 
+  const withFingerprint = parsed.map((tx) => ({
+    ...tx,
+    fingerprint: computeFingerprint(
+      tx.date,
+      tx.amount,
+      tx.type,
+      tx.description,
+    ),
+  }));
+  const withOccurrence = assignOccurrences(withFingerprint);
+
+  const { data: existingEntries, error: existingError } = await supabase
+    .from("statement_entries")
+    .select("fingerprint")
+    .eq("user_id", userId)
+    .eq("import_source_id", importSourceId);
+  if (existingError) throw existingError;
+  const existingCounts = new Map<string, number>();
+  for (const entry of existingEntries) {
+    existingCounts.set(
+      entry.fingerprint,
+      (existingCounts.get(entry.fingerprint) ?? 0) + 1,
+    );
+  }
+
+  const fileCounts = new Map<string, number>();
+  for (const row of withOccurrence) {
+    fileCounts.set(row.fingerprint, row.occurrence);
+  }
+  let decreasedFingerprintCount = 0;
+  for (const [fingerprint, n] of fileCounts) {
+    const m = existingCounts.get(fingerprint) ?? 0;
+    if (n < m) decreasedFingerprintCount++;
+  }
+
+  const unlinkedManual = await fetchUnlinkedManualTransactions(
+    supabase,
+    userId,
+  );
+
   const dictionariesByType = {
     income: normalizeDictionary(
       buildDictionary(categories.filter((c) => c.type === "income")),
@@ -161,42 +242,70 @@ export async function previewImport(
     ),
   };
 
-  const hashes = parsed.map((tx) =>
-    computeImportHash(importSourceId, tx.date, tx.amount, tx.description),
-  );
-
-  const { data: existing, error: existingError } = await supabase
-    .from("transactions")
-    .select("import_hash")
-    .eq("user_id", userId)
-    .in("import_hash", hashes);
-  if (existingError) throw existingError;
-  const existingHashes = new Set(existing.map((t) => t.import_hash));
-
-  const seenInFile = new Set<string>();
+  const usedManualIds = new Set<string>();
   const rows: ImportPreviewRow[] = [];
-  for (let i = 0; i < parsed.length; i++) {
-    const tx = parsed[i];
-    const hash = hashes[i];
-    const isDuplicate = existingHashes.has(hash) || seenInFile.has(hash);
-    seenInFile.add(hash);
-    rows.push({
-      date: tx.date,
-      description: tx.description,
-      amount: tx.amount,
-      type: tx.type,
-      categoryId:
-        resolveGenre(tx.description, dictionariesByType[tx.type]) ?? null,
-      hash,
-      isDuplicate,
-    });
+  for (const row of withOccurrence) {
+    const base = {
+      date: row.date,
+      description: row.description,
+      amount: row.amount,
+      type: row.type,
+      fingerprint: row.fingerprint,
+      occurrence: row.occurrence,
+    };
+
+    const m = existingCounts.get(row.fingerprint) ?? 0;
+    if (row.occurrence <= m) {
+      rows.push({
+        ...base,
+        categoryId: null,
+        status: "registered",
+        linkedTransactionId: null,
+        candidates: [],
+      });
+      continue;
+    }
+
+    const candidatePool = unlinkedManual.filter(
+      (t) => !usedManualIds.has(t.id),
+    );
+    const match = findCandidates(row, candidatePool);
+    if (match.kind === "link") {
+      usedManualIds.add(match.transactionId);
+      rows.push({
+        ...base,
+        categoryId: null,
+        status: "link",
+        linkedTransactionId: match.transactionId,
+        candidates: [],
+      });
+    } else if (match.kind === "ambiguous") {
+      rows.push({
+        ...base,
+        categoryId: null,
+        status: "ambiguous",
+        linkedTransactionId: null,
+        candidates: match.candidates,
+      });
+    } else {
+      rows.push({
+        ...base,
+        categoryId:
+          resolveGenre(row.description, dictionariesByType[row.type]) ?? null,
+        status: "new",
+        linkedTransactionId: null,
+        candidates: [],
+      });
+    }
   }
 
-  const newCount = rows.filter((r) => !r.isDuplicate).length;
   return {
     rows,
-    newCount,
-    duplicateCount: rows.length - newCount,
+    registeredCount: rows.filter((r) => r.status === "registered").length,
+    linkCount: rows.filter((r) => r.status === "link").length,
+    newCount: rows.filter((r) => r.status === "new").length,
+    ambiguousCount: rows.filter((r) => r.status === "ambiguous").length,
+    decreasedFingerprintCount,
     fileName,
     importSourceId,
   };
@@ -207,19 +316,23 @@ export type ConfirmImportRow = {
   description: string;
   amount: number;
   type: "income" | "expense";
-  categoryId: string | null;
+  occurrence: number;
+  action:
+    | { kind: "link"; transactionId: string }
+    | { kind: "create"; categoryId: string | null };
 };
 
 export type ConfirmImportResult = {
-  insertedCount: number;
-  skippedCount: number;
+  matchedCount: number;
+  createdCount: number;
+  duplicateCount: number;
 };
 
 export async function confirmImport(
   importSourceId: string,
   fileName: string,
   rows: ConfirmImportRow[],
-  previewDuplicateCount: number,
+  registeredCount: number,
 ): Promise<ConfirmImportResult> {
   const { supabase, userId } = await getAuthedUserId();
 
@@ -239,72 +352,160 @@ export async function confirmImport(
   if (categoriesError) throw categoriesError;
   const validCategoryIds = new Set(categories.map((c) => c.id));
 
-  const seenHashes = new Set<string>();
-  const toInsert: {
-    user_id: string;
-    date: string;
-    amount: number;
-    type: "income" | "expense";
-    category_id: string | null;
-    description: string;
-    source: "import";
-    import_source_id: string;
-    import_hash: string;
-  }[] = [];
+  const linkTransactionIds = rows
+    .filter((row) => row.action.kind === "link")
+    .map(
+      (row) =>
+        (row.action as { kind: "link"; transactionId: string }).transactionId,
+    );
+
+  let candidatesById = new Map<
+    string,
+    {
+      id: string;
+      date: string;
+      amount: number;
+      type: string;
+      description: string | null;
+    }
+  >();
+  let alreadyLinkedIds = new Set<string>();
+  if (linkTransactionIds.length > 0) {
+    const [
+      { data: candidates, error: candidatesError },
+      { data: linked, error: linkedError },
+    ] = await Promise.all([
+      supabase
+        .from("transactions")
+        .select("id, date, amount, type, description")
+        .eq("user_id", userId)
+        .eq("source", "manual")
+        .in("id", linkTransactionIds),
+      supabase
+        .from("statement_entries")
+        .select("transaction_id")
+        .eq("user_id", userId)
+        .in("transaction_id", linkTransactionIds),
+    ]);
+    if (candidatesError) throw candidatesError;
+    if (linkedError) throw linkedError;
+    candidatesById = new Map(candidates.map((c) => [c.id, c]));
+    alreadyLinkedIds = new Set(linked.map((e) => e.transaction_id));
+  }
+
+  let matchedCount = 0;
+  let createdCount = 0;
+  let duplicateCount = registeredCount;
 
   for (const row of rows) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) continue;
     if (!Number.isFinite(row.amount) || row.amount <= 0) continue;
     if (row.type !== "income" && row.type !== "expense") continue;
-    const hash = computeImportHash(
-      importSourceId,
+
+    const fingerprint = computeFingerprint(
       row.date,
       row.amount,
+      row.type,
       row.description,
     );
-    if (seenHashes.has(hash)) continue;
-    seenHashes.add(hash);
-    toInsert.push({
-      user_id: userId,
-      date: row.date,
-      amount: row.amount,
-      type: row.type,
-      category_id:
-        row.categoryId && validCategoryIds.has(row.categoryId)
-          ? row.categoryId
-          : null,
-      description: row.description,
-      source: "import",
-      import_source_id: importSourceId,
-      import_hash: hash,
+    const entryKey = computeEntryKey({
+      importSourceId,
+      fingerprint,
+      occurrence: row.occurrence,
     });
-  }
 
-  let insertedCount = 0;
-  if (toInsert.length > 0) {
-    const { data, error } = await supabase
-      .from("transactions")
-      .upsert(toInsert, { ignoreDuplicates: true })
-      .select("id");
-    if (error) throw error;
-    insertedCount = data.length;
-  }
+    let transactionId: string | null = null;
 
-  const skippedCount =
-    Math.max(previewDuplicateCount, 0) + (toInsert.length - insertedCount);
+    if (row.action.kind === "link") {
+      const candidate = candidatesById.get(row.action.transactionId);
+      const isValidCandidate =
+        candidate &&
+        candidate.date === row.date &&
+        candidate.amount === row.amount &&
+        candidate.type === row.type &&
+        !alreadyLinkedIds.has(candidate.id);
+
+      if (isValidCandidate && candidate) {
+        if (!candidate.description) {
+          const { error: updateError } = await supabase
+            .from("transactions")
+            .update({ description: row.description })
+            .eq("id", candidate.id)
+            .eq("user_id", userId);
+          if (updateError) throw updateError;
+        }
+        transactionId = candidate.id;
+        alreadyLinkedIds.add(candidate.id);
+      }
+    }
+
+    if (!transactionId) {
+      const categoryId =
+        row.action.kind === "create" &&
+        row.action.categoryId &&
+        validCategoryIds.has(row.action.categoryId)
+          ? row.action.categoryId
+          : null;
+      const { data: created, error: createError } = await supabase
+        .from("transactions")
+        .insert({
+          user_id: userId,
+          date: row.date,
+          amount: row.amount,
+          type: row.type,
+          category_id: categoryId,
+          description: row.description,
+          source: "import",
+          import_source_id: importSourceId,
+        })
+        .select("id")
+        .single();
+      if (createError) throw createError;
+      transactionId = created.id;
+    }
+
+    const { error: entryError } = await supabase
+      .from("statement_entries")
+      .insert({
+        user_id: userId,
+        import_source_id: importSourceId,
+        transaction_id: transactionId,
+        entry_key: entryKey,
+        fingerprint,
+        occurrence: row.occurrence,
+        date: row.date,
+        amount: row.amount,
+        type: row.type,
+        description: row.description,
+      });
+    if (entryError) {
+      if (entryError.code === POSTGRES_ERROR_CODE.UNIQUE_VIOLATION) {
+        duplicateCount++;
+        continue;
+      }
+      throw entryError;
+    }
+
+    if (row.action.kind === "link") {
+      matchedCount++;
+    } else {
+      createdCount++;
+    }
+  }
 
   const { error: batchError } = await supabase.from("import_batches").insert({
     user_id: userId,
     import_source_id: importSourceId,
     file_name: fileName,
     source_type: SOURCE_TYPE_BY_FORMAT[source.format_key],
-    inserted_count: insertedCount,
-    skipped_count: skippedCount,
+    matched_count: matchedCount,
+    created_count: createdCount,
+    duplicate_count: duplicateCount,
   });
   if (batchError) throw batchError;
 
   revalidatePath("/");
-  return { insertedCount, skippedCount };
+  return { matchedCount, createdCount, duplicateCount };
 }
 
 export type ImportPreviewFormState = {
