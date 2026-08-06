@@ -18,6 +18,7 @@ function category(
     is_default: false,
     parent_id: parentId,
     import_keywords: null,
+    default_key: null,
     created_at: "2026-08-01T00:00:00Z",
   };
 }

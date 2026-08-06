@@ -13,6 +13,7 @@ export type Category = {
   is_default: boolean;
   parent_id: string | null;
   import_keywords: string[] | null;
+  default_key: string | null;
   created_at: string;
 };
 
