@@ -35,7 +35,6 @@ export type Transaction = {
   memo: string | null;
   source: TransactionSource;
   import_source_id: string | null;
-  import_hash: string | null;
   created_at: string;
 };
 
@@ -46,8 +45,25 @@ export type ImportBatch = {
   file_name: string;
   source_type: ImportSourceType;
   imported_at: string;
-  inserted_count: number;
-  skipped_count: number;
+  matched_count: number;
+  created_count: number;
+  duplicate_count: number;
+};
+
+export type StatementEntry = {
+  id: string;
+  user_id: string;
+  import_source_id: string;
+  transaction_id: string;
+  entry_key: string;
+  fingerprint: string;
+  occurrence: number;
+  external_id: string | null;
+  date: string;
+  amount: number;
+  type: CategoryType;
+  description: string;
+  created_at: string;
 };
 
 export type Database = {
@@ -75,6 +91,12 @@ export type Database = {
         Row: ImportBatch;
         Insert: Partial<ImportBatch>;
         Update: Partial<ImportBatch>;
+        Relationships: [];
+      };
+      statement_entries: {
+        Row: StatementEntry;
+        Insert: Partial<StatementEntry>;
+        Update: Partial<StatementEntry>;
         Relationships: [];
       };
     };

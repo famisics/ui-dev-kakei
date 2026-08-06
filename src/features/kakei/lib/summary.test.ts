@@ -39,7 +39,6 @@ function transaction(
     memo: null,
     source: "manual",
     import_source_id: null,
-    import_hash: null,
     created_at: "2026-08-01T00:00:00Z",
   };
 }
