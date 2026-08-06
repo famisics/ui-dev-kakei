@@ -20,6 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  type ConfirmImportResult,
+  type ConfirmImportRow,
   confirmImport,
   type ImportPreviewFormState,
   previewImportFromForm,
@@ -28,6 +30,15 @@ import type { Category, ImportSource } from "@/features/kakei/db/types";
 import { formatYen } from "@/features/kakei/lib/format";
 
 const initialState: ImportPreviewFormState = { status: "idle" };
+
+const STATUS_LABEL: Record<string, string> = {
+  registered: "登録済み",
+  link: "紐付け予定",
+  new: "新規作成予定",
+  ambiguous: "要確認",
+};
+
+const NEW_TRANSACTION_VALUE = "__new__";
 
 export function ImportUploader({
   importSources,
@@ -46,34 +57,63 @@ export function ImportUploader({
   const [fileName, setFileName] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [confirmed, setConfirmed] = useState<{
-    insertedCount: number;
-    skippedCount: number;
-  } | null>(null);
+  const [confirmed, setConfirmed] = useState<ConfirmImportResult | null>(null);
+  const [resolutions, setResolutions] = useState<Record<number, string>>({});
+
+  function resetPreviewResult() {
+    setConfirmed(null);
+    setResolutions({});
+  }
 
   const categoryById = useMemo(
     () => new Map(categories.map((c) => [c.id, c])),
     [categories],
   );
 
+  const unresolvedAmbiguousCount = useMemo(() => {
+    if (!state.result) return 0;
+    return state.result.rows.filter(
+      (row, index) => row.status === "ambiguous" && !resolutions[index],
+    ).length;
+  }, [state.result, resolutions]);
+
+  const importableCount = state.result
+    ? state.result.linkCount +
+      state.result.newCount +
+      state.result.ambiguousCount
+    : 0;
+
   async function handleConfirm() {
     if (state.status !== "success" || !state.result) return;
     setConfirming(true);
     try {
-      const rows = state.result.rows
-        .filter((r) => !r.isDuplicate)
-        .map((r) => ({
-          date: r.date,
-          description: r.description,
-          amount: r.amount,
-          type: r.type,
-          categoryId: r.categoryId,
-        }));
+      const rows: ConfirmImportRow[] = [];
+      state.result.rows.forEach((row, index) => {
+        if (row.status === "registered") return;
+        const common = {
+          date: row.date,
+          description: row.description,
+          amount: row.amount,
+          type: row.type,
+          occurrence: row.occurrence,
+        };
+        const action: ConfirmImportRow["action"] | undefined =
+          row.status === "link" && row.linkedTransactionId
+            ? { kind: "link", transactionId: row.linkedTransactionId }
+            : row.status === "new"
+              ? { kind: "create", categoryId: row.categoryId }
+              : row.status === "ambiguous" && resolutions[index]
+                ? resolutions[index] === NEW_TRANSACTION_VALUE
+                  ? { kind: "create", categoryId: row.categoryId }
+                  : { kind: "link", transactionId: resolutions[index] }
+                : undefined;
+        if (action) rows.push({ ...common, action });
+      });
       const result = await confirmImport(
         state.result.importSourceId,
         state.result.fileName,
         rows,
-        state.result.duplicateCount,
+        state.result.registeredCount,
       );
       setConfirmed(result);
     } finally {
@@ -92,7 +132,7 @@ export function ImportUploader({
     files.items.add(file);
     fileInputRef.current.files = files.files;
     setFileName(file.name);
-    setConfirmed(null);
+    resetPreviewResult();
     formRef.current?.requestSubmit();
   }
 
@@ -121,7 +161,7 @@ export function ImportUploader({
             className="flex flex-col gap-3"
             onSubmit={() => {
               setFileName("");
-              setConfirmed(null);
+              resetPreviewResult();
             }}
           >
             <div className="flex flex-col gap-2 sm:max-w-64">
@@ -203,43 +243,97 @@ export function ImportUploader({
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2 text-sm">
-              <Badge variant="outline">新規 {state.result.newCount}件</Badge>
               <Badge variant="outline">
-                重複スキップ {state.result.duplicateCount}件
+                紐付け予定 {state.result.linkCount}件
+              </Badge>
+              <Badge variant="outline">
+                新規作成予定 {state.result.newCount}件
+              </Badge>
+              <Badge variant="outline">
+                要確認 {state.result.ambiguousCount}件
+              </Badge>
+              <Badge variant="outline">
+                登録済み {state.result.registeredCount}件
               </Badge>
             </div>
+
+            {state.result.decreasedFingerprintCount > 0 && (
+              <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                前回までに登録済みの明細が、今回のファイルには一部含まれていません（
+                {state.result.decreasedFingerprintCount}
+                件）。既存の取引・明細は削除されません。
+              </p>
+            )}
 
             {state.result.rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 ファイルから取引を読み取れませんでした。取込元のフォーマットが正しいか確認してください。
               </p>
-            ) : state.result.newCount === 0 ? (
+            ) : importableCount === 0 ? (
               <p className="text-sm text-muted-foreground">
-                すべて重複のため、新規に取り込む取引はありません。
+                すべて登録済みのため、新規に取り込む取引はありません。
               </p>
             ) : (
               <ul className="flex flex-col gap-2">
                 {state.result.rows.map((row, index) => (
                   <li
-                    key={`${row.hash}-${index}`}
-                    className="flex flex-col gap-1 border-b border-border py-2 last:border-b-0 sm:flex-row sm:items-center sm:justify-between"
+                    // biome-ignore lint/suspicious/noArrayIndexKey: プレビュー結果は再取得ごとに全置換される
+                    key={index}
+                    className="flex flex-col gap-2 border-b border-border py-2 last:border-b-0"
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="tnum text-muted-foreground">
-                        {row.date}
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="tnum text-muted-foreground">
+                          {row.date}
+                        </span>
+                        <span>{row.description}</span>
+                        <span className="text-muted-foreground">
+                          {row.categoryId
+                            ? (categoryById.get(row.categoryId)?.name ??
+                              "未分類")
+                            : "未分類"}
+                        </span>
+                        <Badge variant="outline">
+                          {STATUS_LABEL[row.status]}
+                        </Badge>
+                      </div>
+                      <span className="mf-num tnum text-sm">
+                        {row.type === "income" ? "+" : "-"}
+                        {formatYen(row.amount)}
                       </span>
-                      <span>{row.description}</span>
-                      <span className="text-muted-foreground">
-                        {row.categoryId
-                          ? (categoryById.get(row.categoryId)?.name ?? "未分類")
-                          : "未分類"}
-                      </span>
-                      {row.isDuplicate && <Badge variant="outline">重複</Badge>}
                     </div>
-                    <span className="mf-num tnum text-sm">
-                      {row.type === "income" ? "+" : "-"}
-                      {formatYen(row.amount)}
-                    </span>
+                    {row.status === "ambiguous" && (
+                      <div className="flex flex-col gap-1 sm:max-w-96">
+                        <Select
+                          value={resolutions[index] ?? ""}
+                          onValueChange={(value) =>
+                            setResolutions((prev) => ({
+                              ...prev,
+                              [index]: value,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="紐付ける取引を選択してください" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {row.candidates.map((candidate) => (
+                              <SelectItem
+                                key={candidate.id}
+                                value={candidate.id}
+                              >
+                                {candidate.description ||
+                                  candidate.memo ||
+                                  "(内容なし)"}
+                              </SelectItem>
+                            ))}
+                            <SelectItem value={NEW_TRANSACTION_VALUE}>
+                              新規取引として作成する
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -247,13 +341,19 @@ export function ImportUploader({
 
             {confirmed ? (
               <p className="text-sm text-muted-foreground">
-                {confirmed.insertedCount}件を取り込みました（重複スキップ{" "}
-                {confirmed.skippedCount}件）。
+                紐付け {confirmed.matchedCount}件、新規作成{" "}
+                {confirmed.createdCount}
+                件を取り込みました（登録済みスキップ {confirmed.duplicateCount}
+                件）。
               </p>
             ) : (
               <Button
                 onClick={handleConfirm}
-                disabled={confirming || state.result.newCount === 0}
+                disabled={
+                  confirming ||
+                  importableCount === 0 ||
+                  unresolvedAmbiguousCount > 0
+                }
                 className="self-start"
               >
                 この内容で取り込む
