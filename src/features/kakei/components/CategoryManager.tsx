@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,10 @@ import {
   updateCategoryFromForm,
 } from "@/features/kakei/actions/categories";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
+import {
+  runActionWithToast,
+  withToast,
+} from "@/features/kakei/lib/toast-action";
 
 const initialState: CategoryFormState = { status: "idle" };
 const rootCategory = "root";
@@ -72,17 +76,14 @@ function CategoryRow({
     transform,
     transition,
   } = useSortable({ id: category.id, disabled: editing });
+  const [isDeleting, startDeleteTransition] = useTransition();
   const [state, formAction, isPending] = useActionState(
-    async (
-      prevState: CategoryFormState,
-      formData: FormData,
-    ): Promise<CategoryFormState> => {
-      const result = await updateCategoryFromForm(prevState, formData);
-      if (result.status === "success") {
-        setEditing(false);
-      }
-      return result;
-    },
+    withToast(updateCategoryFromForm, {
+      loading: "更新しています…",
+      success: "ジャンルを更新しました。",
+      error: "ジャンルの更新に失敗しました。",
+      onSuccess: () => setEditing(false),
+    }),
     initialState,
   );
   const style = {
@@ -241,8 +242,15 @@ function CategoryRow({
           type="button"
           variant="destructive"
           size="sm"
-          onClick={() => deleteCategory(category.id)}
-          disabled={category.is_default}
+          onClick={() =>
+            startDeleteTransition(() =>
+              runActionWithToast(() => deleteCategory(category.id), {
+                success: "ジャンルを削除しました。",
+                error: "ジャンルの削除に失敗しました。",
+              }),
+            )
+          }
+          disabled={category.is_default || isDeleting}
           title={
             category.is_default
               ? "デフォルトのジャンルは削除できません"
@@ -263,7 +271,11 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
     orderByHierarchy(categories),
   );
   const [createState, createFormAction, isCreating] = useActionState(
-    createCategoryFromForm,
+    withToast(createCategoryFromForm, {
+      loading: "追加しています…",
+      success: "ジャンルを追加しました。",
+      error: "ジャンルの追加に失敗しました。",
+    }),
     initialState,
   );
   const sensors = useSensors(
@@ -302,9 +314,15 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
       newIndex,
     );
 
+    const previousOrder = orderedCategories;
     setOrderedCategories(reorderedCategories);
     toast.promise(
-      reorderCategories(reorderedCategories.map((category) => category.id)),
+      reorderCategories(
+        reorderedCategories.map((category) => category.id),
+      ).catch((error) => {
+        setOrderedCategories(previousOrder);
+        throw error;
+      }),
       {
         loading: "更新しています…",
         success: "ジャンルの並び順を更新しました。",

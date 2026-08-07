@@ -25,6 +25,7 @@ import {
 } from "@/features/kakei/actions/transactions";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
 import { currentDate } from "@/features/kakei/lib/format";
+import { withToast } from "@/features/kakei/lib/toast-action";
 
 const initialState: TransactionFormState = { status: "idle" };
 
@@ -32,16 +33,12 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<CategoryType>("expense");
   const [state, formAction, isPending] = useActionState(
-    async (
-      prevState: TransactionFormState,
-      formData: FormData,
-    ): Promise<TransactionFormState> => {
-      const result = await createTransactionFromForm(prevState, formData);
-      if (result.status === "success") {
-        setOpen(false);
-      }
-      return result;
-    },
+    withToast(createTransactionFromForm, {
+      loading: "登録しています…",
+      success: "取引を登録しました。",
+      error: "取引の登録に失敗しました。",
+      onSuccess: () => setOpen(false),
+    }),
     initialState,
   );
 

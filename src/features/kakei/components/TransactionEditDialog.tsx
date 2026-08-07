@@ -28,6 +28,7 @@ import type {
   CategoryType,
   Transaction,
 } from "@/features/kakei/db/types";
+import { withToast } from "@/features/kakei/lib/toast-action";
 
 const initialState: TransactionFormState = { status: "idle" };
 const unclassified = "unclassified";
@@ -46,14 +47,12 @@ function TransactionEditForm({
     transaction.category_id ?? unclassified,
   );
   const [state, formAction, isPending] = useActionState(
-    async (
-      prevState: TransactionFormState,
-      formData: FormData,
-    ): Promise<TransactionFormState> => {
-      const result = await updateTransactionFromForm(prevState, formData);
-      if (result.status === "success") onSaved();
-      return result;
-    },
+    withToast(updateTransactionFromForm, {
+      loading: "更新しています…",
+      success: "取引を更新しました。",
+      error: "取引の更新に失敗しました。",
+      onSuccess: onSaved,
+    }),
     initialState,
   );
 

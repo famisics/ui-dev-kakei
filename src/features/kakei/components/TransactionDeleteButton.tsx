@@ -1,9 +1,9 @@
 "use client";
 
 import { useTransition } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { deleteTransaction } from "@/features/kakei/actions/transactions";
+import { runActionWithToast } from "@/features/kakei/lib/toast-action";
 
 export function TransactionDeleteButton({
   transactionId,
@@ -14,15 +14,12 @@ export function TransactionDeleteButton({
 
   function handleDelete() {
     if (!confirm("この取引を削除しますか?")) return;
-    startTransition(async () => {
-      try {
-        await deleteTransaction(transactionId);
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : "取引の削除に失敗しました。",
-        );
-      }
-    });
+    startTransition(() =>
+      runActionWithToast(() => deleteTransaction(transactionId), {
+        success: "取引を削除しました。",
+        error: "取引の削除に失敗しました。",
+      }),
+    );
   }
 
   return (
