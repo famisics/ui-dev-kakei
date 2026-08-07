@@ -36,6 +36,7 @@ export type Transaction = {
   memo: string | null;
   source: TransactionSource;
   import_source_id: string | null;
+  sort_order: number;
   created_at: string;
 };
 
