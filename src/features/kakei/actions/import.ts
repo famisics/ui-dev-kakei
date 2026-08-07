@@ -26,6 +26,7 @@ import { parseJcb } from "@/features/kakei/import/parsers/jcb";
 import { parseRakuten } from "@/features/kakei/import/parsers/rakuten";
 import { parseVpass } from "@/features/kakei/import/parsers/vpass";
 import type { CardParser } from "@/features/kakei/import/types";
+import { fetchMinSortOrderByDate } from "@/features/kakei/lib/sort-order";
 import { getAuthedUserId } from "@/lib/supabase/auth";
 import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
 
@@ -329,6 +330,35 @@ export type ConfirmImportResult = {
   reclassifiedCount: number;
 };
 
+const IMPORT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * 明細内での日付の並び順（昇順/降順）を判定し、同じ日付の行の中で
+ * どれが「一番最新」かを示すランク（0が最新）を行インデックスごとに返す。
+ * カード会社ごとにファイル内の並び順（新→旧か旧→新か）が異なるため、
+ * 先頭行と末尾行の日付を比較して都度判定する。
+ */
+function computeDateRanks(rows: { date: string }[]): number[] {
+  const validDates = rows
+    .map((row) => row.date)
+    .filter((date) => IMPORT_DATE_RE.test(date));
+  const ascending =
+    validDates.length >= 2 &&
+    validDates[0] <= validDates[validDates.length - 1];
+
+  const ranks = new Array<number>(rows.length).fill(0);
+  const countByDate = new Map<string, number>();
+  const indices = ascending ? [...rows.keys()].reverse() : [...rows.keys()];
+  for (const index of indices) {
+    const date = rows[index].date;
+    if (!IMPORT_DATE_RE.test(date)) continue;
+    const rank = countByDate.get(date) ?? 0;
+    ranks[index] = rank;
+    countByDate.set(date, rank + 1);
+  }
+  return ranks;
+}
+
 export async function confirmImport(
   importSourceId: string,
   fileName: string,
@@ -397,9 +427,15 @@ export async function confirmImport(
   let matchedCount = 0;
   let createdCount = 0;
   let duplicateCount = registeredCount;
+  const dateRanks = computeDateRanks(rows);
+  const createdSortAssignments: {
+    transactionId: string;
+    date: string;
+    rank: number;
+  }[] = [];
 
-  for (const row of rows) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(row.date)) continue;
+  for (const [index, row] of rows.entries()) {
+    if (!IMPORT_DATE_RE.test(row.date)) continue;
     if (!Number.isFinite(row.amount) || row.amount <= 0) continue;
     if (row.type !== "income" && row.type !== "expense") continue;
 
@@ -463,6 +499,11 @@ export async function confirmImport(
         .single();
       if (createError) throw createError;
       transactionId = created.id;
+      createdSortAssignments.push({
+        transactionId,
+        date: row.date,
+        rank: dateRanks[index],
+      });
     }
 
     const { error: entryError } = await supabase
@@ -492,6 +533,25 @@ export async function confirmImport(
     } else {
       createdCount++;
     }
+  }
+
+  if (createdSortAssignments.length > 0) {
+    const minSortOrderByDate = await fetchMinSortOrderByDate(
+      supabase,
+      userId,
+      createdSortAssignments.map((assignment) => assignment.date),
+    );
+    await Promise.all(
+      createdSortAssignments.map(async ({ transactionId, date, rank }) => {
+        const base = minSortOrderByDate.get(date) ?? 0;
+        const { error } = await supabase
+          .from("transactions")
+          .update({ sort_order: base - 1 - rank })
+          .eq("id", transactionId)
+          .eq("user_id", userId);
+        if (error) throw error;
+      }),
+    );
   }
 
   const { error: batchError } = await supabase.from("import_batches").insert({

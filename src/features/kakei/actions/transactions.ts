@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { CategoryType, Transaction } from "@/features/kakei/db/types";
+import { nextTopSortOrder } from "@/features/kakei/lib/sort-order";
 import { getAuthedUserId } from "@/lib/supabase/auth";
 import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
 
@@ -26,7 +27,8 @@ export async function listTransactionsForMonth(
     .eq("user_id", userId)
     .gte("date", start)
     .lt("date", end)
-    .order("date", { ascending: false });
+    .order("date", { ascending: false })
+    .order("sort_order", { ascending: true });
   if (error) throw error;
   return data;
 }
@@ -42,6 +44,7 @@ export type CreateTransactionInput = {
 
 export async function createTransaction(input: CreateTransactionInput) {
   const { supabase, userId } = await getAuthedUserId();
+  const sortOrder = await nextTopSortOrder(supabase, userId, input.date);
   const { error } = await supabase.from("transactions").insert({
     user_id: userId,
     date: input.date,
@@ -51,6 +54,7 @@ export async function createTransaction(input: CreateTransactionInput) {
     description: input.description ?? null,
     memo: input.memo ?? null,
     source: "manual",
+    sort_order: sortOrder,
   });
   if (error) throw error;
   revalidatePath("/");
@@ -82,8 +86,9 @@ export async function updateTransaction(
   if (currentError) throw currentError;
   if (!current) throw new Error("取引が見つかりません。");
 
+  const dateChanged = current.date !== input.date;
   if (
-    current.date !== input.date ||
+    dateChanged ||
     current.amount !== input.amount ||
     current.type !== input.type
   ) {
@@ -100,6 +105,10 @@ export async function updateTransaction(
     }
   }
 
+  const sortOrder = dateChanged
+    ? await nextTopSortOrder(supabase, userId, input.date)
+    : undefined;
+
   const { data, error } = await supabase
     .from("transactions")
     .update({
@@ -109,6 +118,7 @@ export async function updateTransaction(
       category_id: input.categoryId ?? null,
       description: input.description ?? null,
       memo: input.memo ?? null,
+      ...(sortOrder !== undefined && { sort_order: sortOrder }),
     })
     .eq("id", id)
     .eq("user_id", userId)
@@ -116,6 +126,21 @@ export async function updateTransaction(
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("取引が見つかりません。");
+  revalidatePath("/");
+}
+
+export async function reorderTransactions(orderedIds: string[]) {
+  const { supabase, userId } = await getAuthedUserId();
+  await Promise.all(
+    orderedIds.map(async (id, index) => {
+      const { error } = await supabase
+        .from("transactions")
+        .update({ sort_order: index })
+        .eq("id", id)
+        .eq("user_id", userId);
+      if (error) throw error;
+    }),
+  );
   revalidatePath("/");
 }
 
