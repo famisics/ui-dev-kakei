@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,14 +21,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  type ConfirmImportBatchResult,
   type ConfirmImportResult,
   type ConfirmImportRow,
-  confirmImport,
+  confirmImportBatch,
+  finalizeImportBatch,
   type ImportPreviewFormState,
   previewImportFromForm,
 } from "@/features/kakei/actions/import";
 import type { Category, ImportSource } from "@/features/kakei/db/types";
+import { computeDateRanks } from "@/features/kakei/import/date-rank";
 import { formatYen } from "@/features/kakei/lib/format";
+import { withToast } from "@/features/kakei/lib/toast-action";
 
 const initialState: ImportPreviewFormState = { status: "idle" };
 
@@ -39,6 +44,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const NEW_TRANSACTION_VALUE = "__new__";
+const CONFIRM_CHUNK_SIZE = 10;
 
 export function ImportUploader({
   importSources,
@@ -49,7 +55,11 @@ export function ImportUploader({
 }) {
   const [sourceId, setSourceId] = useState(importSources[0]?.id ?? "");
   const [state, formAction, isPending] = useActionState(
-    previewImportFromForm,
+    withToast(previewImportFromForm, {
+      loading: "プレビューを作成しています…",
+      success: "プレビューを作成しました。",
+      error: "プレビューの作成に失敗しました。",
+    }),
     initialState,
   );
   const [confirming, setConfirming] = useState(false);
@@ -85,9 +95,10 @@ export function ImportUploader({
 
   async function handleConfirm() {
     if (state.status !== "success" || !state.result) return;
+    const { importSourceId, fileName, registeredCount } = state.result;
     setConfirming(true);
     try {
-      const rows: ConfirmImportRow[] = [];
+      const rowsWithoutRank: Omit<ConfirmImportRow, "rank">[] = [];
       state.result.rows.forEach((row, index) => {
         if (row.status === "registered") return;
         const common = {
@@ -107,15 +118,66 @@ export function ImportUploader({
                   ? { kind: "create", categoryId: row.categoryId }
                   : { kind: "link", transactionId: resolutions[index] }
                 : undefined;
-        if (action) rows.push({ ...common, action });
+        if (action) rowsWithoutRank.push({ ...common, action });
       });
-      const result = await confirmImport(
-        state.result.importSourceId,
-        state.result.fileName,
-        rows,
-        state.result.registeredCount,
+      const ranks = computeDateRanks(rowsWithoutRank);
+      const rows: ConfirmImportRow[] = rowsWithoutRank.map((row, index) => ({
+        ...row,
+        rank: ranks[index],
+      }));
+
+      const total = rows.length;
+      const toastId = toast.loading(
+        total > 0 ? `取り込み中… (0/${total}件)` : "取り込んでいます…",
       );
-      setConfirmed(result);
+      const totals: ConfirmImportBatchResult = {
+        matchedCount: 0,
+        createdCount: 0,
+        duplicateCount: registeredCount,
+      };
+      let processed = 0;
+      try {
+        for (let i = 0; i < rows.length; i += CONFIRM_CHUNK_SIZE) {
+          const chunk = rows.slice(i, i + CONFIRM_CHUNK_SIZE);
+          const batchResult = await confirmImportBatch(importSourceId, chunk);
+          totals.matchedCount += batchResult.matchedCount;
+          totals.createdCount += batchResult.createdCount;
+          totals.duplicateCount += batchResult.duplicateCount;
+          processed += chunk.length;
+          toast.loading(`取り込み中… (${processed}/${total}件)`, {
+            id: toastId,
+          });
+        }
+      } catch (error) {
+        toast.error(
+          `${processed}件まで取り込み済みです。以降の処理は中断しました（${
+            error instanceof Error ? error.message : "取り込みに失敗しました。"
+          }）。`,
+          { id: toastId },
+        );
+        return;
+      }
+
+      try {
+        const { reclassifiedCount } = await finalizeImportBatch(
+          importSourceId,
+          fileName,
+          totals,
+        );
+        const result: ConfirmImportResult = { ...totals, reclassifiedCount };
+        toast.success(
+          `紐付け${result.matchedCount}件、新規作成${result.createdCount}件を取り込みました。`,
+          { id: toastId },
+        );
+        setConfirmed(result);
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "取り込みの確定処理に失敗しました。",
+          { id: toastId },
+        );
+      }
     } finally {
       setConfirming(false);
     }

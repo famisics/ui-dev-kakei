@@ -7,6 +7,7 @@ import type {
   ImportSource,
   ImportSourceType,
 } from "@/features/kakei/db/types";
+import { IMPORT_DATE_RE } from "@/features/kakei/import/date-rank";
 import type { GenreDictionaryEntry } from "@/features/kakei/import/genre-dictionary";
 import {
   normalizeDictionary,
@@ -28,7 +29,6 @@ import { parseVpass } from "@/features/kakei/import/parsers/vpass";
 import type { CardParser } from "@/features/kakei/import/types";
 import { fetchMinSortOrderByDate } from "@/features/kakei/lib/sort-order";
 import { getAuthedUserId } from "@/lib/supabase/auth";
-import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
 
 const PARSERS: Record<ImportFormatKey, CardParser> = {
   jcb: parseJcb,
@@ -318,6 +318,8 @@ export type ConfirmImportRow = {
   amount: number;
   type: "income" | "expense";
   occurrence: number;
+  /** ファイル全体での同日内の新しさランク（0が最新）。`computeDateRanks` で算出する。 */
+  rank: number;
   action:
     | { kind: "link"; transactionId: string }
     | { kind: "create"; categoryId: string | null };
@@ -330,56 +332,22 @@ export type ConfirmImportResult = {
   reclassifiedCount: number;
 };
 
-const IMPORT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+export type ConfirmImportBatchResult = {
+  matchedCount: number;
+  createdCount: number;
+  duplicateCount: number;
+};
 
-/**
- * 明細内での日付の並び順（昇順/降順）を判定し、同じ日付の行の中で
- * どれが「一番最新」かを示すランク（0が最新）を行インデックスごとに返す。
- * カード会社ごとにファイル内の並び順（新→旧か旧→新か）が異なるため、
- * 先頭行と末尾行の日付を比較して都度判定する。
- */
-function computeDateRanks(rows: { date: string }[]): number[] {
-  const validDates = rows
-    .map((row) => row.date)
-    .filter((date) => IMPORT_DATE_RE.test(date));
-  const ascending =
-    validDates.length >= 2 &&
-    validDates[0] <= validDates[validDates.length - 1];
-
-  const ranks = new Array<number>(rows.length).fill(0);
-  const countByDate = new Map<string, number>();
-  const indices = ascending ? [...rows.keys()].reverse() : [...rows.keys()];
-  for (const index of indices) {
-    const date = rows[index].date;
-    if (!IMPORT_DATE_RE.test(date)) continue;
-    const rank = countByDate.get(date) ?? 0;
-    ranks[index] = rank;
-    countByDate.set(date, rank + 1);
-  }
-  return ranks;
-}
-
-export async function confirmImport(
+export async function confirmImportBatch(
   importSourceId: string,
-  fileName: string,
   rows: ConfirmImportRow[],
-  registeredCount: number,
-): Promise<ConfirmImportResult> {
+): Promise<ConfirmImportBatchResult> {
   const { supabase, userId } = await getAuthedUserId();
 
-  const [
-    { data: source, error: sourceError },
-    { data: categories, error: categoriesError },
-  ] = await Promise.all([
-    supabase
-      .from("import_sources")
-      .select("*")
-      .eq("id", importSourceId)
-      .eq("user_id", userId)
-      .single(),
-    supabase.from("categories").select("*").eq("user_id", userId),
-  ]);
-  if (sourceError || !source) throw new Error("取込元が見つかりません");
+  const { data: categories, error: categoriesError } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("user_id", userId);
   if (categoriesError) throw categoriesError;
   const validCategoryIds = new Set(categories.map((c) => c.id));
 
@@ -424,35 +392,25 @@ export async function confirmImport(
     alreadyLinkedIds = new Set(linked.map((e) => e.transaction_id));
   }
 
-  let matchedCount = 0;
-  let createdCount = 0;
-  let duplicateCount = registeredCount;
-  const dateRanks = computeDateRanks(rows);
-  const createdSortAssignments: {
-    transactionId: string;
-    date: string;
-    rank: number;
-  }[] = [];
+  const validRows = rows.filter(
+    (row) =>
+      IMPORT_DATE_RE.test(row.date) &&
+      Number.isFinite(row.amount) &&
+      row.amount > 0 &&
+      (row.type === "income" || row.type === "expense"),
+  );
 
-  for (const [index, row] of rows.entries()) {
-    if (!IMPORT_DATE_RE.test(row.date)) continue;
-    if (!Number.isFinite(row.amount) || row.amount <= 0) continue;
-    if (row.type !== "income" && row.type !== "expense") continue;
+  type ResolvedRow = {
+    row: ConfirmImportRow;
+    kind: "link" | "create";
+    transactionId: string | null;
+  };
 
-    const fingerprint = computeFingerprint(
-      row.date,
-      row.amount,
-      row.type,
-      row.description,
-    );
-    const entryKey = computeEntryKey({
-      importSourceId,
-      fingerprint,
-      occurrence: row.occurrence,
-    });
+  const resolvedRows: ResolvedRow[] = [];
+  const descriptionBackfills: { transactionId: string; description: string }[] =
+    [];
 
-    let transactionId: string | null = null;
-
+  for (const row of validRows) {
     if (row.action.kind === "link") {
       const candidate = candidatesById.get(row.action.transactionId);
       const isValidCandidate =
@@ -464,104 +422,166 @@ export async function confirmImport(
 
       if (isValidCandidate && candidate) {
         if (!candidate.description) {
-          const { error: updateError } = await supabase
-            .from("transactions")
-            .update({ description: row.description })
-            .eq("id", candidate.id)
-            .eq("user_id", userId);
-          if (updateError) throw updateError;
+          descriptionBackfills.push({
+            transactionId: candidate.id,
+            description: row.description,
+          });
         }
-        transactionId = candidate.id;
         alreadyLinkedIds.add(candidate.id);
+        resolvedRows.push({ row, kind: "link", transactionId: candidate.id });
+        continue;
       }
     }
+    resolvedRows.push({ row, kind: "create", transactionId: null });
+  }
 
-    if (!transactionId) {
-      const categoryId =
-        row.action.kind === "create" &&
-        row.action.categoryId &&
-        validCategoryIds.has(row.action.categoryId)
-          ? row.action.categoryId
-          : null;
-      const { data: created, error: createError } = await supabase
+  await Promise.all(
+    descriptionBackfills.map(async (backfill) => {
+      const { error: updateError } = await supabase
         .from("transactions")
-        .insert({
+        .update({ description: backfill.description })
+        .eq("id", backfill.transactionId)
+        .eq("user_id", userId);
+      if (updateError) throw updateError;
+    }),
+  );
+
+  const toCreate = resolvedRows.filter((r) => r.kind === "create");
+  if (toCreate.length > 0) {
+    const { data: createdRows, error: createError } = await supabase
+      .from("transactions")
+      .insert(
+        toCreate.map(({ row }) => ({
           user_id: userId,
           date: row.date,
           amount: row.amount,
           type: row.type,
-          category_id: categoryId,
+          category_id:
+            row.action.kind === "create" &&
+            row.action.categoryId &&
+            validCategoryIds.has(row.action.categoryId)
+              ? row.action.categoryId
+              : null,
           description: row.description,
           source: "import",
           import_source_id: importSourceId,
-        })
-        .select("id")
-        .single();
-      if (createError) throw createError;
-      transactionId = created.id;
-      createdSortAssignments.push({
-        transactionId,
-        date: row.date,
-        rank: dateRanks[index],
-      });
+        })),
+      )
+      .select("id");
+    if (createError) throw createError;
+    if (createdRows.length !== toCreate.length) {
+      throw new Error("取引の作成件数が一致しませんでした。");
     }
+    toCreate.forEach((resolved, index) => {
+      resolved.transactionId = createdRows[index].id;
+    });
 
-    const { error: entryError } = await supabase
-      .from("statement_entries")
-      .insert({
-        user_id: userId,
-        import_source_id: importSourceId,
-        transaction_id: transactionId,
-        entry_key: entryKey,
-        fingerprint,
-        occurrence: row.occurrence,
-        date: row.date,
-        amount: row.amount,
-        type: row.type,
-        description: row.description,
-      });
-    if (entryError) {
-      if (entryError.code === POSTGRES_ERROR_CODE.UNIQUE_VIOLATION) {
-        duplicateCount++;
-        continue;
-      }
-      throw entryError;
-    }
-
-    if (row.action.kind === "link") {
-      matchedCount++;
-    } else {
-      createdCount++;
-    }
-  }
-
-  if (createdSortAssignments.length > 0) {
     const minSortOrderByDate = await fetchMinSortOrderByDate(
       supabase,
       userId,
-      createdSortAssignments.map((assignment) => assignment.date),
+      toCreate.map(({ row }) => row.date),
     );
     await Promise.all(
-      createdSortAssignments.map(async ({ transactionId, date, rank }) => {
-        const base = minSortOrderByDate.get(date) ?? 0;
+      toCreate.map(async ({ row, transactionId }) => {
+        const base = minSortOrderByDate.get(row.date) ?? 0;
         const { error } = await supabase
           .from("transactions")
-          .update({ sort_order: base - 1 - rank })
-          .eq("id", transactionId)
+          .update({ sort_order: base - 1 - row.rank })
+          .eq("id", transactionId as string)
           .eq("user_id", userId);
         if (error) throw error;
       }),
     );
   }
 
+  const entries = resolvedRows.map(({ row, kind, transactionId }) => {
+    const fingerprint = computeFingerprint(
+      row.date,
+      row.amount,
+      row.type,
+      row.description,
+    );
+    return {
+      kind,
+      entry: {
+        user_id: userId,
+        import_source_id: importSourceId,
+        transaction_id: transactionId as string,
+        entry_key: computeEntryKey({
+          importSourceId,
+          fingerprint,
+          occurrence: row.occurrence,
+        }),
+        fingerprint,
+        occurrence: row.occurrence,
+        date: row.date,
+        amount: row.amount,
+        type: row.type,
+        description: row.description,
+      },
+    };
+  });
+
+  let matchedCount = 0;
+  let createdCount = 0;
+  let duplicateCount = rows.length - validRows.length;
+
+  if (entries.length > 0) {
+    const { data: insertedEntries, error: entriesError } = await supabase
+      .from("statement_entries")
+      .upsert(
+        entries.map((e) => e.entry),
+        {
+          onConflict: "user_id,import_source_id,entry_key",
+          ignoreDuplicates: true,
+        },
+      )
+      .select("entry_key");
+    if (entriesError) throw entriesError;
+    const insertedKeys = new Set(insertedEntries.map((e) => e.entry_key));
+    for (const { kind, entry } of entries) {
+      if (!insertedKeys.has(entry.entry_key)) {
+        duplicateCount++;
+        continue;
+      }
+      if (kind === "link") matchedCount++;
+      else createdCount++;
+    }
+  }
+
+  return { matchedCount, createdCount, duplicateCount };
+}
+
+export async function finalizeImportBatch(
+  importSourceId: string,
+  fileName: string,
+  totals: ConfirmImportBatchResult,
+): Promise<{ reclassifiedCount: number }> {
+  const { supabase, userId } = await getAuthedUserId();
+
+  const [
+    { data: source, error: sourceError },
+    { data: categories, error: categoriesError },
+  ] = await Promise.all([
+    supabase
+      .from("import_sources")
+      .select("*")
+      .eq("id", importSourceId)
+      .eq("user_id", userId)
+      .single(),
+    supabase.from("categories").select("*").eq("user_id", userId),
+  ]);
+  if (sourceError || !source) throw new Error("取込元が見つかりません");
+  if (categoriesError) throw categoriesError;
+
   const { error: batchError } = await supabase.from("import_batches").insert({
     user_id: userId,
     import_source_id: importSourceId,
     file_name: fileName,
     source_type: SOURCE_TYPE_BY_FORMAT[source.format_key],
-    matched_count: matchedCount,
-    created_count: createdCount,
-    duplicate_count: duplicateCount,
+    matched_count: totals.matchedCount,
+    created_count: totals.createdCount,
+    duplicate_count: totals.duplicateCount,
   });
   if (batchError) throw batchError;
 
@@ -573,7 +593,7 @@ export async function confirmImport(
   );
 
   revalidatePath("/");
-  return { matchedCount, createdCount, duplicateCount, reclassifiedCount };
+  return { reclassifiedCount };
 }
 
 /**
