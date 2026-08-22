@@ -229,7 +229,7 @@ export function CategoryCashFlow({ flow }: { flow: CategoryCashFlowData }) {
   return (
     <Card size="sm">
       <CardHeader>
-        <CardTitle>ジャンル別収支</CardTitle>
+        <CardTitle>カテゴリ別収支</CardTitle>
       </CardHeader>
       <CardContent>
         {!hasTransactions ? (
@@ -249,8 +249,8 @@ export function CategoryCashFlow({ flow }: { flow: CategoryCashFlowData }) {
                   linkCurvature={0.55}
                   iterations={48}
                   margin={{ top: 44, right: 150, bottom: 20, left: 150 }}
-                  title="ジャンル別収支"
-                  desc="中央の収支から、親ジャンル、小ジャンルの順に金額の流れを示します。"
+                  title="カテゴリ別収支"
+                  desc="中央の収支から、親カテゴリ、小カテゴリの順に金額の流れを示します。"
                 >
                   <Tooltip
                     formatter={(value) => formatYen(Number(value))}

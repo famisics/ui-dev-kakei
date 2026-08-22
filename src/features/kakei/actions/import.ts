@@ -7,12 +7,12 @@ import type {
   ImportSource,
   ImportSourceType,
 } from "@/features/kakei/db/types";
-import { IMPORT_DATE_RE } from "@/features/kakei/import/date-rank";
-import type { GenreDictionaryEntry } from "@/features/kakei/import/genre-dictionary";
+import type { CategoryDictionaryEntry } from "@/features/kakei/import/category-dictionary";
 import {
   normalizeDictionary,
-  resolveGenre,
-} from "@/features/kakei/import/genre-dictionary";
+  resolveCategory,
+} from "@/features/kakei/import/category-dictionary";
+import { IMPORT_DATE_RE } from "@/features/kakei/import/date-rank";
 import {
   computeEntryKey,
   computeFingerprint,
@@ -137,10 +137,10 @@ export type ImportPreviewResult = {
   importSourceId: string;
 };
 
-function buildDictionary(categories: Category[]): GenreDictionaryEntry[] {
+function buildDictionary(categories: Category[]): CategoryDictionaryEntry[] {
   return categories
     .filter((c) => c.import_keywords && c.import_keywords.length > 0)
-    .map((c) => ({ genre: c.id, keywords: c.import_keywords as string[] }));
+    .map((c) => ({ category: c.id, keywords: c.import_keywords as string[] }));
 }
 
 async function fetchUnlinkedManualTransactions(
@@ -308,7 +308,8 @@ export async function previewImport(
       rows.push({
         ...base,
         categoryId:
-          resolveGenre(row.description, dictionariesByType[row.type]) ?? null,
+          resolveCategory(row.description, dictionariesByType[row.type]) ??
+          null,
         status: "new",
         linkedTransactionId: null,
         candidates: [],
@@ -647,7 +648,7 @@ async function reclassifyUncategorizedImports(
   let reclassifiedCount = 0;
   for (const transaction of uncategorized) {
     if (!transaction.description) continue;
-    const categoryId = resolveGenre(
+    const categoryId = resolveCategory(
       transaction.description,
       dictionariesByType[transaction.type],
     );

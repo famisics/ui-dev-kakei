@@ -46,7 +46,7 @@ function transaction(
 }
 
 describe("categoryCashFlow", () => {
-  it("収支を親ジャンルと小ジャンルの2階層に集計する", () => {
+  it("収支を親カテゴリと小カテゴリの2階層に集計する", () => {
     const categories = [
       category("income", "定期収入", "income"),
       category("salary", "給与", "income", "income"),

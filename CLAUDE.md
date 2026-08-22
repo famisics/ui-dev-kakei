@@ -26,7 +26,7 @@ npm run db:migrate:dry-run    # supabase db push --dry-run
 （`to authenticated` + `(select auth.uid()) = user_id`、更新ポリシーは `using` と
 `with check` の両方）を必ず設定する。
 
-デフォルトジャンル（`categories.is_default`）とその自動振り分けキーワード
+デフォルトカテゴリ（`categories.is_default`）とその自動振り分けキーワード
 （`import_keywords`）は `src/consts/default-categories.ts` が正データで、アプリの
 UIからは編集できない（`protect_default_category` トリガーがDB側でも拒否する）。
 定義を変更したら以下を実行し、生成されたマイグレーションを `db:migrate` で適用する。
@@ -45,7 +45,7 @@ Next.js (App Router) + Supabase（Postgres + Auth、`@supabase/ssr`）の家計�
 
 - `components/` — 画面パーツ（`SummaryCards`, `TransactionList`, `QuickAddForm`,
   `CategoryManager`, `ImportUploader` 等）
-- `actions/` — Server Actions（`"use server"`）。取引・ジャンル・インポートのCRUD。
+- `actions/` — Server Actions（`"use server"`）。取引・カテゴリ・インポートのCRUD。
   データ取得もServer Actions/Server Componentから直接呼び出し、更新後は
   `revalidatePath` で反映する。
 - `lib/` — 月次サマリーなどの集計ロジック（view-model算出）
@@ -54,7 +54,7 @@ Next.js (App Router) + Supabase（Postgres + Auth、`@supabase/ssr`）の家計�
   - `normalize.ts` — 明細名の正規化
   - `hash.ts` — フィンガープリント・`entry_key`生成
   - `matching.ts` — 手入力取引との照合ロジック
-  - `genre-dictionary.ts` — キーワードによるジャンル自動判定
+  - `category-dictionary.ts` — キーワードによるカテゴリ自動判定
 - `db/types.ts` — 全テーブルの型定義とSupabase `Database` 型（`Row`/`Insert`/`Update`）
 
 ### 認証
@@ -75,12 +75,12 @@ Next.js (App Router) + Supabase（Postgres + Auth、`@supabase/ssr`）の家計�
 - `amount` は常に正数。収支の方向は `type`(`income`/`expense`) だけで表す。
 - `transactions.source` は `manual`（手入力）/ `import`（インポートで新規作成）。
   インポートで既存の手入力取引に紐付けても `source = 'manual'` を維持する。
-- `description`（インポート元の明細名 or 手入力時の取引内容。自動ジャンル判定・
+- `description`（インポート元の明細名 or 手入力時の取引内容。自動カテゴリ判定・
   重複判定に使う）と `memo`（ユーザーが自由に追記する、`description`とは独立の
   メモ）は分離している。
-- `categories` は `parent_id` で親ジャンル/小ジャンルの階層を持ち、
-  `import_keywords`（`sort_order`昇順で先勝ち評価）で自動ジャンル判定に使う。
-  `is_default` のジャンルは削除できない。
+- `categories` は `parent_id` で親カテゴリ/小カテゴリの階層を持ち、
+  `import_keywords`（`sort_order`昇順で先勝ち評価）で自動カテゴリ判定に使う。
+  `is_default` のカテゴリは削除できない。
 
 ### カード明細インポートの重複防止（詳細は `docs/import-spec.md`）
 
@@ -101,7 +101,7 @@ Next.js (App Router) + Supabase（Postgres + Auth、`@supabase/ssr`）の家計�
   `source = 'manual'` かつ未紐付けの取引を候補にする。候補が複数ある場合は
   自動で紐付けず、ユーザーの選択が確定するまでインポートを確定しない。
 - 確定処理はプレビュー後に候補条件をサーバー側で再評価し、渡された
-  取引ID・ジャンルID・取込元IDが認証ユーザー所有か検証してから行を1件ずつ処理する。
+  取引ID・カテゴリID・取込元IDが認証ユーザー所有か検証してから行を1件ずつ処理する。
 
 ## Lint/Format
 

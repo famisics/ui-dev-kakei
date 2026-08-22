@@ -55,9 +55,9 @@ export async function updateCategory(id: string, input: UpdateCategoryInput) {
     .eq("user_id", userId)
     .maybeSingle();
   if (categoryError) throw categoryError;
-  if (!category) throw new Error("ジャンルが見つかりません。");
+  if (!category) throw new Error("カテゴリが見つかりません。");
   if (category.is_default) {
-    throw new Error("デフォルトのジャンルは編集できません。");
+    throw new Error("デフォルトのカテゴリは編集できません。");
   }
 
   const { error } = await supabase
@@ -87,9 +87,9 @@ export async function deleteCategory(id: string) {
     .eq("user_id", userId)
     .maybeSingle();
   if (categoryError) throw categoryError;
-  if (!category) throw new Error("ジャンルが見つかりません。");
+  if (!category) throw new Error("カテゴリが見つかりません。");
   if (category.is_default) {
-    throw new Error("デフォルトのジャンルは削除できません。");
+    throw new Error("デフォルトのカテゴリは削除できません。");
   }
 
   const { error } = await supabase
@@ -134,7 +134,7 @@ export async function createCategoryFromForm(
   const color = formData.get("color");
   const parentId = formData.get("parentId");
   if (typeof name !== "string" || name.trim().length === 0) {
-    return { status: "error", message: "ジャンル名を入力してください。" };
+    return { status: "error", message: "カテゴリ名を入力してください。" };
   }
   if (type !== "income" && type !== "expense") {
     return { status: "error", message: "種別を選択してください。" };
@@ -171,7 +171,7 @@ export async function updateCategoryFromForm(
     return { status: "error", message: "不正なリクエストです。" };
   }
   if (typeof name !== "string" || name.trim().length === 0) {
-    return { status: "error", message: "ジャンル名を入力してください。" };
+    return { status: "error", message: "カテゴリ名を入力してください。" };
   }
   if (type !== "income" && type !== "expense") {
     return { status: "error", message: "種別を選択してください。" };
