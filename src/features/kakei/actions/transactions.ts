@@ -17,6 +17,7 @@ function monthRange(yearMonth: string) {
 }
 
 export type TransactionWithImportSource = Transaction & {
+  importSourceId: string | null;
   importSourceName: string | null;
 };
 
@@ -63,6 +64,7 @@ export async function listTransactionsForMonth(
     const sourceId = sourceIdByTransactionId.get(t.id) ?? t.import_source_id;
     return {
       ...t,
+      importSourceId: sourceId ?? null,
       importSourceName: sourceId
         ? (sourceNameById.get(sourceId) ?? null)
         : null,
@@ -111,7 +113,7 @@ export async function updateTransaction(
       .eq("type", input.type)
       .maybeSingle();
     if (categoryError) throw categoryError;
-    if (!category) throw new Error("選択したジャンルが見つかりません。");
+    if (!category) throw new Error("選択したカテゴリが見つかりません。");
   }
 
   const { data: current, error: currentError } = await supabase

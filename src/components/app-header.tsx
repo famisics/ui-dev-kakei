@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 
 const navigation = [
   { href: "/", label: "トップ" },
-  { href: "/categories", label: "ジャンル管理" },
+  { href: "/categories", label: "カテゴリ管理" },
+  { href: "/import-sources", label: "カード管理" },
 ];
 
 export function AppHeader() {

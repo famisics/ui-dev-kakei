@@ -232,7 +232,7 @@ export function ImportUploader({
       <Card size="sm">
         <CardContent className="py-6">
           <p className="text-sm text-muted-foreground">
-            取込元がまだありません。上の「取込元を追加」からカードを登録してください。
+            カードがまだありません。上の「カードを追加」から登録してください。
           </p>
         </CardContent>
       </Card>
@@ -256,7 +256,7 @@ export function ImportUploader({
             }}
           >
             <div className="flex flex-col gap-2 sm:max-w-64">
-              <Label htmlFor="importSourceId">取込元</Label>
+              <Label htmlFor="importSourceId">カード</Label>
               <Select value={sourceId} onValueChange={setSourceId}>
                 <SelectTrigger id="importSourceId" className="w-full">
                   <SelectValue />
@@ -368,7 +368,7 @@ export function ImportUploader({
 
             {state.result.rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                ファイルから取引を読み取れませんでした。取込元のフォーマットが正しいか確認してください。
+                ファイルから取引を読み取れませんでした。カードのフォーマットが正しいか確認してください。
               </p>
             ) : importableCount === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -447,7 +447,7 @@ export function ImportUploader({
                 件を取り込みました（登録済みスキップ {confirmed.duplicateCount}
                 件）。
                 {confirmed.reclassifiedCount > 0 &&
-                  ` 過去に未分類だった${confirmed.reclassifiedCount}件をジャンル分けしました。`}
+                  ` 過去に未分類だった${confirmed.reclassifiedCount}件をカテゴリ分けしました。`}
               </p>
             ) : (
               <Button

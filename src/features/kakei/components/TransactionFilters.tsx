@@ -8,15 +8,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Category } from "@/features/kakei/db/types";
+import type { Category, ImportSource } from "@/features/kakei/db/types";
 
 const ALL = "all";
+const NONE = "none";
 
-export function TransactionFilters({ categories }: { categories: Category[] }) {
+export function TransactionFilters({
+  categories,
+  importSources,
+}: {
+  categories: Category[];
+  importSources: ImportSource[];
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const type = searchParams.get("type") ?? ALL;
   const categoryId = searchParams.get("category") ?? ALL;
+  const source = searchParams.get("source") ?? ALL;
 
   function updateParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -48,13 +56,30 @@ export function TransactionFilters({ categories }: { categories: Category[] }) {
         onValueChange={(value) => updateParam("category", value)}
       >
         <SelectTrigger size="sm">
-          <SelectValue placeholder="ジャンル" />
+          <SelectValue placeholder="カテゴリ" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>すべてのジャンル</SelectItem>
+          <SelectItem value={ALL}>すべてのカテゴリ</SelectItem>
           {categories.map((category) => (
             <SelectItem key={category.id} value={category.id}>
               {category.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={source}
+        onValueChange={(value) => updateParam("source", value)}
+      >
+        <SelectTrigger size="sm">
+          <SelectValue placeholder="カード" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>すべてのカード</SelectItem>
+          <SelectItem value={NONE}>カードなし</SelectItem>
+          {importSources.map((source) => (
+            <SelectItem key={source.id} value={source.id}>
+              {source.name}
             </SelectItem>
           ))}
         </SelectContent>

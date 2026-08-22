@@ -67,6 +67,35 @@ export async function createImportSource(input: {
   });
   if (error) throw error;
   revalidatePath("/");
+  revalidatePath("/import-sources");
+}
+
+export async function deleteImportSource(id: string): Promise<void> {
+  const { supabase, userId } = await getAuthedUserId();
+
+  const { error: entriesError } = await supabase
+    .from("statement_entries")
+    .delete()
+    .eq("user_id", userId)
+    .eq("import_source_id", id);
+  if (entriesError) throw entriesError;
+
+  const { error: transactionsError } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", userId)
+    .eq("import_source_id", id);
+  if (transactionsError) throw transactionsError;
+
+  const { error } = await supabase
+    .from("import_sources")
+    .delete()
+    .eq("id", id)
+    .eq("user_id", userId);
+  if (error) throw error;
+
+  revalidatePath("/");
+  revalidatePath("/import-sources");
 }
 
 export type ImportSourceFormState = {
@@ -88,7 +117,7 @@ export async function createImportSourceFromForm(
   const name = formData.get("name");
   const formatKey = formData.get("formatKey");
   if (typeof name !== "string" || name.trim().length === 0) {
-    return { status: "error", message: "取込元名を入力してください。" };
+    return { status: "error", message: "カード名を入力してください。" };
   }
   if (
     typeof formatKey !== "string" ||
@@ -189,7 +218,7 @@ export async function previewImport(
       .eq("user_id", userId)
       .order("sort_order", { ascending: true }),
   ]);
-  if (sourceError || !source) throw new Error("取込元が見つかりません");
+  if (sourceError || !source) throw new Error("カードが見つかりません");
   if (categoriesError) throw categoriesError;
 
   const parsedFiles = await Promise.all(
@@ -582,7 +611,7 @@ export async function finalizeImportBatch(
     .eq("id", importSourceId)
     .eq("user_id", userId)
     .single();
-  if (sourceError || !source) throw new Error("取込元が見つかりません");
+  if (sourceError || !source) throw new Error("カードが見つかりません");
 
   const { error: batchError } = await supabase.from("import_batches").insert({
     user_id: userId,
@@ -680,7 +709,7 @@ export async function previewImportFromForm(
     .getAll("file")
     .filter((f): f is File => f instanceof File && f.size > 0);
   if (typeof importSourceId !== "string" || importSourceId.length === 0) {
-    return { status: "error", message: "取込元を選択してください。" };
+    return { status: "error", message: "カードを選択してください。" };
   }
   if (files.length === 0) {
     return { status: "error", message: "ファイルを選択してください。" };

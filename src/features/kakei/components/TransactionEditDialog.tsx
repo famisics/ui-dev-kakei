@@ -25,6 +25,7 @@ import {
   updateTransactionFromForm,
 } from "@/features/kakei/actions/transactions";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
+import { buildCategoryTreeOptions } from "@/features/kakei/lib/category-tree";
 import { withToast } from "@/features/kakei/lib/toast-action";
 
 const initialState: TransactionFormState = { status: "idle" };
@@ -54,7 +55,10 @@ function TransactionEditForm({
   );
 
   const categoryOptions = useMemo(
-    () => categories.filter((category) => category.type === type),
+    () =>
+      buildCategoryTreeOptions(
+        categories.filter((category) => category.type === type),
+      ),
     [categories, type],
   );
 
@@ -115,16 +119,16 @@ function TransactionEditForm({
         />
       </div>
       <div className="flex flex-col gap-2">
-        <Label htmlFor={`category-${transaction.id}`}>ジャンル</Label>
+        <Label htmlFor={`category-${transaction.id}`}>カテゴリ</Label>
         <Select value={categoryId} onValueChange={setCategoryId}>
           <SelectTrigger id={`category-${transaction.id}`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={unclassified}>未分類</SelectItem>
-            {categoryOptions.map((category) => (
+            {categoryOptions.map(({ category, label }) => (
               <SelectItem key={category.id} value={category.id}>
-                {category.name}
+                {label}
               </SelectItem>
             ))}
           </SelectContent>
@@ -150,7 +154,7 @@ function TransactionEditForm({
       </div>
       {transaction.importSourceName && (
         <div className="flex flex-col gap-2">
-          <Label>取込元</Label>
+          <Label>カード</Label>
           <p className="text-sm text-muted-foreground">
             {transaction.importSourceName}
           </p>

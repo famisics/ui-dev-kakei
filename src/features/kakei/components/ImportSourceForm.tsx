@@ -27,7 +27,7 @@ import type { ImportFormatKey } from "@/features/kakei/db/types";
 
 const initialState: ImportSourceFormState = { status: "idle" };
 
-const FORMAT_LABELS: Record<ImportFormatKey, string> = {
+export const FORMAT_LABELS: Record<ImportFormatKey, string> = {
   jcb: "JCB（CSV）",
   debit: "デビットカード（CSV）",
   rakuten: "楽天カード（PDF）",
@@ -54,11 +54,11 @@ export function ImportSourceForm() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">取込元を追加</Button>
+        <Button variant="outline">カードを追加</Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>取込元を追加</DialogTitle>
+          <DialogTitle>カードを追加</DialogTitle>
         </DialogHeader>
         <form action={formAction} className="flex flex-col gap-3">
           <div className="flex flex-col gap-2">
