@@ -212,6 +212,15 @@ export function ImportUploader({
     }
   }
 
+  function submitPreview(files: File[]) {
+    const formData = new FormData();
+    formData.set("importSourceId", sourceId);
+    for (const file of files) formData.append("file", file);
+    setFileNames(files.map((f) => f.name));
+    resetPreviewResult();
+    formAction(formData);
+  }
+
   function handleDrop(event: DragEvent<HTMLLabelElement>) {
     event.preventDefault();
     setIsDragging(false);
@@ -222,9 +231,7 @@ export function ImportUploader({
     const files = new DataTransfer();
     for (const file of droppedFiles) files.items.add(file);
     fileInputRef.current.files = files.files;
-    setFileNames(droppedFiles.map((f) => f.name));
-    resetPreviewResult();
-    formRef.current?.requestSubmit();
+    submitPreview(droppedFiles);
   }
 
   if (importSources.length === 0) {
@@ -248,11 +255,12 @@ export function ImportUploader({
         <CardContent>
           <form
             ref={formRef}
-            action={formAction}
             className="flex flex-col gap-3"
-            onSubmit={() => {
-              setFileNames([]);
-              resetPreviewResult();
+            onSubmit={(event) => {
+              event.preventDefault();
+              const files = Array.from(fileInputRef.current?.files ?? []);
+              if (files.length === 0) return;
+              submitPreview(files);
             }}
           >
             <div className="flex flex-col gap-2 sm:max-w-64">
@@ -269,7 +277,6 @@ export function ImportUploader({
                   ))}
                 </SelectContent>
               </Select>
-              <input type="hidden" name="importSourceId" value={sourceId} />
             </div>
 
             <Label
