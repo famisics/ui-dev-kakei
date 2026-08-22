@@ -22,6 +22,7 @@ export type CashFlowCategory = {
   type: Category["type"];
   total: number;
   ratio: number;
+  color: string;
   children: CashFlowCategoryItem[];
 };
 
@@ -30,6 +31,7 @@ export type CashFlowCategoryItem = {
   name: string;
   total: number;
   ratio: number;
+  color: string;
 };
 
 export type CategoryCashFlow = {
@@ -43,6 +45,8 @@ type CategoryTotal = {
   category: Category | null;
   total: number;
 };
+
+const UNCLASSIFIED_COLOR = "var(--muted-foreground)";
 
 export function categoryCashFlow(
   transactions: Transaction[],
@@ -87,6 +91,7 @@ export function categoryCashFlow(
         name: parent?.name ?? "未分類",
         type,
         total: 0,
+        color: parent?.color ?? UNCLASSIFIED_COLOR,
         directTotal: 0,
         children: [],
       };
@@ -98,6 +103,7 @@ export function categoryCashFlow(
           name: item.category.name,
           total: item.total,
           ratio: grandTotal > 0 ? item.total / grandTotal : 0,
+          color: item.category.color ?? group.color,
         });
       } else {
         group.directTotal += item.total;
@@ -118,6 +124,7 @@ export function categoryCashFlow(
                   name: group.name === "未分類" ? "未分類" : "その他",
                   total: directTotal,
                   ratio: grandTotal > 0 ? directTotal / grandTotal : 0,
+                  color: group.color,
                 },
               ]
             : []),
