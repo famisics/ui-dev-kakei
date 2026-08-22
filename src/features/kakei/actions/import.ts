@@ -70,6 +70,21 @@ export async function createImportSource(input: {
   revalidatePath("/import-sources");
 }
 
+export async function updateImportSource(
+  id: string,
+  input: { name: string },
+): Promise<void> {
+  const { supabase, userId } = await getAuthedUserId();
+  const { error } = await supabase
+    .from("import_sources")
+    .update({ name: input.name })
+    .eq("id", id)
+    .eq("user_id", userId);
+  if (error) throw error;
+  revalidatePath("/");
+  revalidatePath("/import-sources");
+}
+
 export async function deleteImportSource(id: string): Promise<void> {
   const { supabase, userId } = await getAuthedUserId();
 
@@ -134,6 +149,29 @@ export async function createImportSourceFromForm(
     return {
       status: "error",
       message: error instanceof Error ? error.message : "作成に失敗しました。",
+    };
+  }
+  return { status: "success" };
+}
+
+export async function updateImportSourceFromForm(
+  _prevState: ImportSourceFormState,
+  formData: FormData,
+): Promise<ImportSourceFormState> {
+  const id = formData.get("id");
+  const name = formData.get("name");
+  if (typeof id !== "string" || id.length === 0) {
+    return { status: "error", message: "不正なリクエストです。" };
+  }
+  if (typeof name !== "string" || name.trim().length === 0) {
+    return { status: "error", message: "カード名を入力してください。" };
+  }
+  try {
+    await updateImportSource(id, { name: name.trim() });
+  } catch (error) {
+    return {
+      status: "error",
+      message: error instanceof Error ? error.message : "更新に失敗しました。",
     };
   }
   return { status: "success" };
