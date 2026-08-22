@@ -11,7 +11,8 @@
     "test": "vitest run",
     "db:migrate": "supabase db push",
     "db:migrate:dry-run": "supabase db push --dry-run",
-    "generate:categories-migration": "bun scripts/generate-default-categories-migration.ts"
+    "generate:categories-migration": "bun scripts/generate-default-categories-migration.ts",
+    "clean": "rm -rf node_modules dist bun.lock"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -45,12 +46,5 @@
     "typescript": "^5.9.3",
     "vitest": "^4.1.10"
   },
-  "ignoreScripts": [
-    "sharp",
-    "unrs-resolver"
-  ],
-  "trustedDependencies": [
-    "sharp",
-    "unrs-resolver"
-  ]
+  "packageManager": "bun@1.3.14"
 }
