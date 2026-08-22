@@ -16,9 +16,13 @@ function monthRange(yearMonth: string) {
   return { start, end: nextMonth };
 }
 
+export type TransactionWithImportSource = Transaction & {
+  importSourceName: string | null;
+};
+
 export async function listTransactionsForMonth(
   yearMonth: string,
-): Promise<Transaction[]> {
+): Promise<TransactionWithImportSource[]> {
   const { supabase, userId } = await getAuthedUserId();
   const { start, end } = monthRange(yearMonth);
   const { data, error } = await supabase
@@ -30,7 +34,40 @@ export async function listTransactionsForMonth(
     .order("date", { ascending: false })
     .order("sort_order", { ascending: true });
   if (error) throw error;
-  return data;
+
+  if (data.length === 0) return [];
+
+  const [
+    { data: entries, error: entriesError },
+    { data: sources, error: sourcesError },
+  ] = await Promise.all([
+    supabase
+      .from("statement_entries")
+      .select("transaction_id, import_source_id")
+      .eq("user_id", userId)
+      .in(
+        "transaction_id",
+        data.map((t) => t.id),
+      ),
+    supabase.from("import_sources").select("id, name").eq("user_id", userId),
+  ]);
+  if (entriesError) throw entriesError;
+  if (sourcesError) throw sourcesError;
+
+  const sourceIdByTransactionId = new Map(
+    entries.map((e) => [e.transaction_id, e.import_source_id]),
+  );
+  const sourceNameById = new Map(sources.map((s) => [s.id, s.name]));
+
+  return data.map((t) => {
+    const sourceId = sourceIdByTransactionId.get(t.id) ?? t.import_source_id;
+    return {
+      ...t,
+      importSourceName: sourceId
+        ? (sourceNameById.get(sourceId) ?? null)
+        : null,
+    };
+  });
 }
 
 export type CreateTransactionInput = {
