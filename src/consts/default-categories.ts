@@ -1,10 +1,10 @@
 /**
- * 全ユーザー共通のデフォルトジャンルと、カード明細インポート時の自動振り分けキーワードの定義。
+ * 全ユーザー共通のデフォルトカテゴリと、カード明細インポート時の自動振り分けキーワードの定義。
  *
  * `key` はDB上の `categories.default_key` に対応する安定識別子で、リネームがあっても
- * 既存ユーザーの行と対応づけるために使う。`parentKey` は親ジャンルの `key` を指す。
- * `sort_order` はこの配列内で同じ `(type, parentKey)` を持つ要素の出現順から算出する
- * （`scripts/generate-default-categories-migration.ts` 参照）。
+ * 既存ユーザーの行と対応づけるために使う。`parentKey` は親カテゴリの `key` を指す。
+ * `sort_order` はこの配列内で同じ `parentKey`（親を持たない場合は種別を問わずルート同士）を
+ * 持つ要素の出現順から算出する（`scripts/generate-default-categories-migration.ts` 参照）。
  */
 
 export type DefaultCategoryType = "income" | "expense";
@@ -20,32 +20,6 @@ export type DefaultCategoryDef = {
 
 export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
   { key: "living", name: "生活費", type: "expense", color: "#22c55e" },
-  { key: "entertainment", name: "娯楽", type: "expense", color: "#ef4444" },
-  {
-    key: "other_expense",
-    name: "その他",
-    type: "expense",
-    color: "#eab308",
-    importKeywords: [],
-  },
-  {
-    key: "reimbursement_expense",
-    name: "立て替え",
-    type: "expense",
-    color: "#eab308",
-    parentKey: "other_expense",
-  },
-  { key: "salary", name: "給与", type: "income", color: null },
-  { key: "remittance", name: "仕送り", type: "income", color: null },
-  { key: "windfall", name: "臨時収入", type: "income", color: null },
-  { key: "other_income", name: "その他", type: "income", color: "#eab308" },
-  {
-    key: "reimbursement_income",
-    name: "立て替え",
-    type: "income",
-    color: "#eab308",
-    parentKey: "other_income",
-  },
   {
     key: "dining_out",
     name: "外食費",
@@ -221,6 +195,7 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
       "イイン",
     ],
   },
+  { key: "entertainment", name: "娯楽", type: "expense", color: "#ef4444" },
   {
     key: "subscription",
     name: "サブスク",
@@ -299,5 +274,37 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
       "オミヤゲ",
       "ミソギノサト",
     ],
+  },
+  {
+    key: "expensive_goods",
+    name: "高額製品",
+    type: "expense",
+    color: "#ef4444",
+    parentKey: "entertainment",
+  },
+  {
+    key: "other_expense",
+    name: "その他",
+    type: "expense",
+    color: "#eab308",
+    importKeywords: [],
+  },
+  {
+    key: "reimbursement_expense",
+    name: "立て替え",
+    type: "expense",
+    color: "#eab308",
+    parentKey: "other_expense",
+  },
+  { key: "salary", name: "給与", type: "income", color: "#3b82f6" },
+  { key: "remittance", name: "仕送り", type: "income", color: "#a855f7" },
+  { key: "windfall", name: "臨時収入", type: "income", color: "#a855f7" },
+  { key: "other_income", name: "その他", type: "income", color: "#eab308" },
+  {
+    key: "reimbursement_income",
+    name: "立て替え",
+    type: "income",
+    color: "#eab308",
+    parentKey: "other_income",
   },
 ];

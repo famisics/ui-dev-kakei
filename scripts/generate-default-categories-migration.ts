@@ -1,5 +1,5 @@
 /**
- * src/consts/default-categories.ts の内容から、デフォルトジャンルを
+ * src/consts/default-categories.ts の内容から、デフォルトカテゴリを
  * 既存ユーザーへ反映し `handle_new_user()` を再定義するマイグレーションSQLを生成する。
  *
  * 実行: `bun scripts/generate-default-categories-migration.ts`
@@ -50,12 +50,12 @@ function topologicallyOrdered(
       const parent = byKey.get(def.parentKey);
       if (!parent) {
         throw new Error(
-          `未知のparentKey "${def.parentKey}" を持つジャンル "${def.key}" があります。`,
+          `未知のparentKey "${def.parentKey}" を持つカテゴリ "${def.key}" があります。`,
         );
       }
       if (parent.type !== def.type) {
         throw new Error(
-          `ジャンル "${def.key}" の type ("${def.type}") が親 "${parent.key}" の type ("${parent.type}") と異なります。categories_parent_key制約に反するため一致させること。`,
+          `カテゴリ "${def.key}" の type ("${def.type}") が親 "${parent.key}" の type ("${parent.type}") と異なります。categories_parent_key制約に反するため一致させること。`,
         );
       }
       visit(parent);
@@ -73,7 +73,7 @@ function withSortOrder(
 ): (DefaultCategoryDef & { sortOrder: number })[] {
   const counters = new Map<string, number>();
   return defs.map((def) => {
-    const groupKey = `${def.type}:${def.parentKey ?? ""}`;
+    const groupKey = def.parentKey ?? "";
     const sortOrder = counters.get(groupKey) ?? 0;
     counters.set(groupKey, sortOrder + 1);
     return { ...def, sortOrder };
@@ -181,7 +181,7 @@ function main() {
 -- \`bun scripts/generate-default-categories-migration.ts\` を再実行すること。
 
 -- protect_default_category トリガーはis_default行の内容変更を拒否するため、
--- このファイル自身によるデフォルトジャンルの同期中は一時的に無効化する。
+-- このファイル自身によるデフォルトカテゴリの同期中は一時的に無効化する。
 alter table public.categories disable trigger protect_default_category;
 
 ${buildReconciliationSql(ordered)}
