@@ -19,8 +19,8 @@ import {
 } from "@/features/kakei/import/hash";
 import type { ManualTransactionCandidate } from "@/features/kakei/import/matching";
 import {
-  assignOccurrences,
   findCandidates,
+  mergeSnapshotFiles,
 } from "@/features/kakei/import/matching";
 import { parseDebit } from "@/features/kakei/import/parsers/debit";
 import { parseJcb } from "@/features/kakei/import/parsers/jcb";
@@ -120,6 +120,7 @@ export type ImportPreviewRow = {
   categoryId: string | null;
   fingerprint: string;
   occurrence: number;
+  fileName: string;
   status: ImportRowStatus;
   linkedTransactionId: string | null;
   candidates: ManualTransactionCandidate[];
@@ -132,7 +133,7 @@ export type ImportPreviewResult = {
   newCount: number;
   ambiguousCount: number;
   decreasedFingerprintCount: number;
-  fileName: string;
+  fileNames: string[];
   importSourceId: string;
 };
 
@@ -168,8 +169,7 @@ async function fetchUnlinkedManualTransactions(
 
 export async function previewImport(
   importSourceId: string,
-  fileBuffer: Buffer,
-  fileName: string,
+  files: { buffer: Buffer; fileName: string }[],
 ): Promise<ImportPreviewResult> {
   const { supabase, userId } = await getAuthedUserId();
 
@@ -192,18 +192,33 @@ export async function previewImport(
   if (sourceError || !source) throw new Error("取込元が見つかりません");
   if (categoriesError) throw categoriesError;
 
-  const parsed = await PARSERS[source.format_key](fileBuffer);
-
-  const withFingerprint = parsed.map((tx) => ({
-    ...tx,
-    fingerprint: computeFingerprint(
-      tx.date,
-      tx.amount,
-      tx.type,
-      tx.description,
-    ),
-  }));
-  const withOccurrence = assignOccurrences(withFingerprint);
+  const parsedFiles = await Promise.all(
+    files.map(async (file) => {
+      let parsed: Awaited<ReturnType<CardParser>>;
+      try {
+        parsed = await PARSERS[source.format_key](file.buffer);
+      } catch (error) {
+        throw new Error(
+          `${file.fileName}の読み取りに失敗しました（${
+            error instanceof Error ? error.message : "不明なエラー"
+          }）。`,
+        );
+      }
+      return {
+        fileName: file.fileName,
+        rows: parsed.map((tx) => ({
+          ...tx,
+          fingerprint: computeFingerprint(
+            tx.date,
+            tx.amount,
+            tx.type,
+            tx.description,
+          ),
+        })),
+      };
+    }),
+  );
+  const withOccurrence = mergeSnapshotFiles(parsedFiles);
 
   const { data: existingEntries, error: existingError } = await supabase
     .from("statement_entries")
@@ -253,6 +268,7 @@ export async function previewImport(
       type: row.type,
       fingerprint: row.fingerprint,
       occurrence: row.occurrence,
+      fileName: row.fileName,
     };
 
     const m = existingCounts.get(row.fingerprint) ?? 0;
@@ -307,7 +323,7 @@ export async function previewImport(
     newCount: rows.filter((r) => r.status === "new").length,
     ambiguousCount: rows.filter((r) => r.status === "ambiguous").length,
     decreasedFingerprintCount,
-    fileName,
+    fileNames: files.map((f) => f.fileName),
     importSourceId,
   };
 }
@@ -556,23 +572,16 @@ export async function finalizeImportBatch(
   importSourceId: string,
   fileName: string,
   totals: ConfirmImportBatchResult,
-): Promise<{ reclassifiedCount: number }> {
+): Promise<void> {
   const { supabase, userId } = await getAuthedUserId();
 
-  const [
-    { data: source, error: sourceError },
-    { data: categories, error: categoriesError },
-  ] = await Promise.all([
-    supabase
-      .from("import_sources")
-      .select("*")
-      .eq("id", importSourceId)
-      .eq("user_id", userId)
-      .single(),
-    supabase.from("categories").select("*").eq("user_id", userId),
-  ]);
+  const { data: source, error: sourceError } = await supabase
+    .from("import_sources")
+    .select("*")
+    .eq("id", importSourceId)
+    .eq("user_id", userId)
+    .single();
   if (sourceError || !source) throw new Error("取込元が見つかりません");
-  if (categoriesError) throw categoriesError;
 
   const { error: batchError } = await supabase.from("import_batches").insert({
     user_id: userId,
@@ -584,6 +593,18 @@ export async function finalizeImportBatch(
     duplicate_count: totals.duplicateCount,
   });
   if (batchError) throw batchError;
+}
+
+export async function completeImport(
+  importSourceId: string,
+): Promise<{ reclassifiedCount: number }> {
+  const { supabase, userId } = await getAuthedUserId();
+
+  const { data: categories, error: categoriesError } = await supabase
+    .from("categories")
+    .select("*")
+    .eq("user_id", userId);
+  if (categoriesError) throw categoriesError;
 
   const reclassifiedCount = await reclassifyUncategorizedImports(
     supabase,
@@ -654,16 +675,23 @@ export async function previewImportFromForm(
   formData: FormData,
 ): Promise<ImportPreviewFormState> {
   const importSourceId = formData.get("importSourceId");
-  const file = formData.get("file");
+  const files = formData
+    .getAll("file")
+    .filter((f): f is File => f instanceof File && f.size > 0);
   if (typeof importSourceId !== "string" || importSourceId.length === 0) {
     return { status: "error", message: "取込元を選択してください。" };
   }
-  if (!(file instanceof File) || file.size === 0) {
+  if (files.length === 0) {
     return { status: "error", message: "ファイルを選択してください。" };
   }
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const result = await previewImport(importSourceId, buffer, file.name);
+    const buffers = await Promise.all(
+      files.map(async (file) => ({
+        buffer: Buffer.from(await file.arrayBuffer()),
+        fileName: file.name,
+      })),
+    );
+    const result = await previewImport(importSourceId, buffers);
     return { status: "success", result };
   } catch (error) {
     return {
