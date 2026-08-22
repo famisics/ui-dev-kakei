@@ -24,6 +24,7 @@ import {
   type ConfirmImportBatchResult,
   type ConfirmImportResult,
   type ConfirmImportRow,
+  completeImport,
   confirmImportBatch,
   finalizeImportBatch,
   type ImportPreviewFormState,
@@ -64,7 +65,7 @@ export function ImportUploader({
   );
   const [confirming, setConfirming] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [fileName, setFileName] = useState("");
+  const [fileNames, setFileNames] = useState<string[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmed, setConfirmed] = useState<ConfirmImportResult | null>(null);
@@ -95,10 +96,12 @@ export function ImportUploader({
 
   async function handleConfirm() {
     if (state.status !== "success" || !state.result) return;
-    const { importSourceId, fileName, registeredCount } = state.result;
+    const { importSourceId, fileNames: resultFileNames } = state.result;
     setConfirming(true);
     try {
-      const rowsWithoutRank: Omit<ConfirmImportRow, "rank">[] = [];
+      const rowsWithoutRank: (Omit<ConfirmImportRow, "rank"> & {
+        fileName: string;
+      })[] = [];
       state.result.rows.forEach((row, index) => {
         if (row.status === "registered") return;
         const common = {
@@ -107,6 +110,7 @@ export function ImportUploader({
           amount: row.amount,
           type: row.type,
           occurrence: row.occurrence,
+          fileName: row.fileName,
         };
         const action: ConfirmImportRow["action"] | undefined =
           row.status === "link" && row.linkedTransactionId
@@ -121,63 +125,88 @@ export function ImportUploader({
         if (action) rowsWithoutRank.push({ ...common, action });
       });
       const ranks = computeDateRanks(rowsWithoutRank);
-      const rows: ConfirmImportRow[] = rowsWithoutRank.map((row, index) => ({
+      const rows = rowsWithoutRank.map((row, index) => ({
         ...row,
         rank: ranks[index],
       }));
+
+      const rowsByFile = new Map<string, ConfirmImportRow[]>();
+      for (const { fileName, ...row } of rows) {
+        const bucket = rowsByFile.get(fileName) ?? [];
+        bucket.push(row);
+        rowsByFile.set(fileName, bucket);
+      }
+      const registeredCountByFile = new Map<string, number>();
+      for (const row of state.result.rows) {
+        if (row.status !== "registered") continue;
+        registeredCountByFile.set(
+          row.fileName,
+          (registeredCountByFile.get(row.fileName) ?? 0) + 1,
+        );
+      }
 
       const total = rows.length;
       const toastId = toast.loading(
         total > 0 ? `取り込み中… (0/${total}件)` : "取り込んでいます…",
       );
-      const totals: ConfirmImportBatchResult = {
+      const grandTotals: ConfirmImportBatchResult = {
         matchedCount: 0,
         createdCount: 0,
-        duplicateCount: registeredCount,
+        duplicateCount: 0,
       };
       let processed = 0;
+      let filesCompleted = 0;
+      let reclassifiedCount = 0;
       try {
-        for (let i = 0; i < rows.length; i += CONFIRM_CHUNK_SIZE) {
-          const chunk = rows.slice(i, i + CONFIRM_CHUNK_SIZE);
-          const batchResult = await confirmImportBatch(importSourceId, chunk);
-          totals.matchedCount += batchResult.matchedCount;
-          totals.createdCount += batchResult.createdCount;
-          totals.duplicateCount += batchResult.duplicateCount;
-          processed += chunk.length;
-          toast.loading(`取り込み中… (${processed}/${total}件)`, {
-            id: toastId,
-          });
+        for (const fileName of resultFileNames) {
+          const fileRows = rowsByFile.get(fileName) ?? [];
+          const fileTotals: ConfirmImportBatchResult = {
+            matchedCount: 0,
+            createdCount: 0,
+            duplicateCount: registeredCountByFile.get(fileName) ?? 0,
+          };
+          for (let i = 0; i < fileRows.length; i += CONFIRM_CHUNK_SIZE) {
+            const chunk = fileRows.slice(i, i + CONFIRM_CHUNK_SIZE);
+            const batchResult = await confirmImportBatch(importSourceId, chunk);
+            fileTotals.matchedCount += batchResult.matchedCount;
+            fileTotals.createdCount += batchResult.createdCount;
+            fileTotals.duplicateCount += batchResult.duplicateCount;
+            processed += chunk.length;
+            toast.loading(`取り込み中… (${processed}/${total}件)`, {
+              id: toastId,
+            });
+          }
+          await finalizeImportBatch(importSourceId, fileName, fileTotals);
+          grandTotals.matchedCount += fileTotals.matchedCount;
+          grandTotals.createdCount += fileTotals.createdCount;
+          grandTotals.duplicateCount += fileTotals.duplicateCount;
+          filesCompleted++;
         }
       } catch (error) {
         toast.error(
-          `${processed}件まで取り込み済みです。以降の処理は中断しました（${
+          `${filesCompleted}/${resultFileNames.length}ファイル、${processed}件まで取り込み済みです。以降の処理は中断しました（${
             error instanceof Error ? error.message : "取り込みに失敗しました。"
           }）。`,
           { id: toastId },
         );
         return;
+      } finally {
+        if (filesCompleted > 0) {
+          try {
+            const completed = await completeImport(importSourceId);
+            reclassifiedCount = completed.reclassifiedCount;
+          } catch {
+            // 再分類・再検証の失敗は取り込み結果自体には影響しないため無視する
+          }
+        }
       }
 
-      try {
-        const { reclassifiedCount } = await finalizeImportBatch(
-          importSourceId,
-          fileName,
-          totals,
-        );
-        const result: ConfirmImportResult = { ...totals, reclassifiedCount };
-        toast.success(
-          `紐付け${result.matchedCount}件、新規作成${result.createdCount}件を取り込みました。`,
-          { id: toastId },
-        );
-        setConfirmed(result);
-      } catch (error) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "取り込みの確定処理に失敗しました。",
-          { id: toastId },
-        );
-      }
+      const result: ConfirmImportResult = { ...grandTotals, reclassifiedCount };
+      toast.success(
+        `紐付け${result.matchedCount}件、新規作成${result.createdCount}件を取り込みました。`,
+        { id: toastId },
+      );
+      setConfirmed(result);
     } finally {
       setConfirming(false);
     }
@@ -187,13 +216,13 @@ export function ImportUploader({
     event.preventDefault();
     setIsDragging(false);
 
-    const file = event.dataTransfer.files[0];
-    if (!file || !fileInputRef.current || isPending) return;
+    const droppedFiles = Array.from(event.dataTransfer.files);
+    if (droppedFiles.length === 0 || !fileInputRef.current || isPending) return;
 
     const files = new DataTransfer();
-    files.items.add(file);
+    for (const file of droppedFiles) files.items.add(file);
     fileInputRef.current.files = files.files;
-    setFileName(file.name);
+    setFileNames(droppedFiles.map((f) => f.name));
     resetPreviewResult();
     formRef.current?.requestSubmit();
   }
@@ -222,7 +251,7 @@ export function ImportUploader({
             action={formAction}
             className="flex flex-col gap-3"
             onSubmit={() => {
-              setFileName("");
+              setFileNames([]);
               resetPreviewResult();
             }}
           >
@@ -270,10 +299,12 @@ export function ImportUploader({
               <span className="font-medium">
                 {isDragging
                   ? "ここにドロップ"
-                  : "CSV・PDFファイルをドラッグ＆ドロップ"}
+                  : "CSV・PDFファイルをドラッグ＆ドロップ（複数選択可）"}
               </span>
               <span className="text-xs font-normal text-muted-foreground">
-                {fileName || "クリックしてファイルを選択することもできます"}
+                {fileNames.length > 0
+                  ? fileNames.join("、")
+                  : "クリックしてファイルを選択することもできます"}
               </span>
             </Label>
             <input
@@ -282,13 +313,21 @@ export function ImportUploader({
               name="file"
               type="file"
               accept=".csv,.pdf"
+              multiple
               required
               className="sr-only"
               onChange={(event) =>
-                setFileName(event.currentTarget.files?.[0]?.name ?? "")
+                setFileNames(
+                  Array.from(event.currentTarget.files ?? []).map(
+                    (f) => f.name,
+                  ),
+                )
               }
             />
-            <Button type="submit" disabled={isPending || !fileName}>
+            <Button
+              type="submit"
+              disabled={isPending || fileNames.length === 0}
+            >
               {isPending ? "プレビュー中..." : "プレビュー"}
             </Button>
           </form>
