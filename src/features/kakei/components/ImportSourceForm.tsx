@@ -28,8 +28,8 @@ import type { ImportFormatKey } from "@/features/kakei/db/types";
 const initialState: ImportSourceFormState = { status: "idle" };
 
 export const FORMAT_LABELS: Record<ImportFormatKey, string> = {
-  jcb: "JCB（CSV）",
-  debit: "デビットカード（CSV）",
+  jcb: "JCBカード（CSV）",
+  debit: "住信SBIデビットカード（CSV）",
   rakuten: "楽天カード（PDF）",
   vpass: "三井住友カード Vpass（CSV）",
 };
