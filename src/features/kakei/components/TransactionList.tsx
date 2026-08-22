@@ -178,6 +178,7 @@ export function TransactionList({
           </p>
         ) : (
           <DndContext
+            id="transaction-list"
             sensors={sensors}
             collisionDetection={closestCenter}
             onDragEnd={handleDragEnd}
