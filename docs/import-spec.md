@@ -200,7 +200,8 @@ entry_key = SHA-256(import_source_id | fingerprint | occurrence)
 2. 指定された手入力取引を条件付きで更新し、明細エントリーを紐付ける。
 3. 対応する取引がない明細の取引を作成する。
 4. `statement_entries` を作成する。
-5. `import_batches` に結果を記録する。
+5. `import_batches` に結果を記録する。複数ファイルを指定した場合は、ファイルごとに
+   1行ずつ記録する。
 
 `statement_entries` の一意制約（`entry_key`、`transaction_id`）を最終防衛線とし、同じインポートを
 同時に確定した場合は一意制約違反となった行をスキップして扱う。
