@@ -86,7 +86,16 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
         <DialogHeader>
           <DialogTitle>取引を登録</DialogTitle>
         </DialogHeader>
-        <form action={formAction} className="flex flex-col gap-3">
+        <form
+          action={formAction}
+          className="flex flex-col gap-3"
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              event.currentTarget.requestSubmit();
+            }
+          }}
+        >
           <div className="flex flex-col gap-2">
             <Label htmlFor="categoryId">
               ジャンル
