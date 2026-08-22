@@ -21,13 +21,10 @@ import {
 } from "@/components/ui/select";
 import {
   type TransactionFormState,
+  type TransactionWithImportSource,
   updateTransactionFromForm,
 } from "@/features/kakei/actions/transactions";
-import type {
-  Category,
-  CategoryType,
-  Transaction,
-} from "@/features/kakei/db/types";
+import type { Category, CategoryType } from "@/features/kakei/db/types";
 import { withToast } from "@/features/kakei/lib/toast-action";
 
 const initialState: TransactionFormState = { status: "idle" };
@@ -38,7 +35,7 @@ function TransactionEditForm({
   categories,
   onSaved,
 }: {
-  transaction: Transaction;
+  transaction: TransactionWithImportSource;
   categories: Category[];
   onSaved: () => void;
 }) {
@@ -151,6 +148,14 @@ function TransactionEditForm({
           defaultValue={transaction.memo ?? ""}
         />
       </div>
+      {transaction.importSourceName && (
+        <div className="flex flex-col gap-2">
+          <Label>取込元</Label>
+          <p className="text-sm text-muted-foreground">
+            {transaction.importSourceName}
+          </p>
+        </div>
+      )}
       {state.status === "error" && (
         <p className="text-sm text-destructive">{state.message}</p>
       )}
@@ -167,7 +172,7 @@ export function TransactionEditDialog({
   transaction,
   categories,
 }: {
-  transaction: Transaction;
+  transaction: TransactionWithImportSource;
   categories: Category[];
 }) {
   const [open, setOpen] = useState(false);

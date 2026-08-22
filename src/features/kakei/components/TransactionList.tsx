@@ -22,10 +22,13 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { reorderTransactions } from "@/features/kakei/actions/transactions";
+import {
+  reorderTransactions,
+  type TransactionWithImportSource,
+} from "@/features/kakei/actions/transactions";
 import { TransactionDeleteButton } from "@/features/kakei/components/TransactionDeleteButton";
 import { TransactionEditDialog } from "@/features/kakei/components/TransactionEditDialog";
-import type { Category, Transaction } from "@/features/kakei/db/types";
+import type { Category } from "@/features/kakei/db/types";
 import { formatYen } from "@/features/kakei/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +38,7 @@ function TransactionRow({
   categories,
   sortable,
 }: {
-  transaction: Transaction;
+  transaction: TransactionWithImportSource;
   category: Category | undefined;
   categories: Category[];
   sortable: boolean;
@@ -85,8 +88,12 @@ function TransactionRow({
             {transaction.description ?? transaction.memo}
           </span>
         )}
-        {transaction.source === "import" && (
-          <Badge variant="outline">インポート</Badge>
+        {transaction.importSourceName ? (
+          <Badge variant="outline">{transaction.importSourceName}</Badge>
+        ) : (
+          transaction.source === "import" && (
+            <Badge variant="outline">インポート</Badge>
+          )
         )}
       </div>
       <div className="flex items-center justify-between gap-2 sm:justify-end">
@@ -114,7 +121,7 @@ export function TransactionList({
   categories,
   hasFilter,
 }: {
-  transactions: Transaction[];
+  transactions: TransactionWithImportSource[];
   categories: Category[];
   hasFilter: boolean;
 }) {
