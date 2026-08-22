@@ -40,6 +40,7 @@ import {
   updateCategoryFromForm,
 } from "@/features/kakei/actions/categories";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
+import { buildCategoryTreeOptions } from "@/features/kakei/lib/category-tree";
 import {
   runActionWithToast,
   withToast,
@@ -47,14 +48,6 @@ import {
 
 const initialState: CategoryFormState = { status: "idle" };
 const rootCategory = "root";
-
-function orderByHierarchy(categories: Category[]) {
-  const roots = categories.filter((category) => !category.parent_id);
-  return roots.flatMap((root) => [
-    root,
-    ...categories.filter((category) => category.parent_id === root.id),
-  ]);
-}
 
 function CategoryRow({
   category,
@@ -80,8 +73,8 @@ function CategoryRow({
   const [state, formAction, isPending] = useActionState(
     withToast(updateCategoryFromForm, {
       loading: "更新しています…",
-      success: "ジャンルを更新しました。",
-      error: "ジャンルの更新に失敗しました。",
+      success: "カテゴリを更新しました。",
+      error: "カテゴリの更新に失敗しました。",
       onSuccess: () => setEditing(false),
     }),
     initialState,
@@ -107,7 +100,7 @@ function CategoryRow({
         <form action={formAction} className="flex flex-wrap items-end gap-2">
           <input type="hidden" name="id" value={category.id} />
           <div className="flex flex-col gap-1">
-            <Label htmlFor={`name-${category.id}`}>ジャンル名</Label>
+            <Label htmlFor={`name-${category.id}`}>カテゴリ名</Label>
             <Input
               id={`name-${category.id}`}
               name="name"
@@ -135,7 +128,7 @@ function CategoryRow({
             <input type="hidden" name="type" value={editType} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label htmlFor={`parent-${category.id}`}>親ジャンル</Label>
+            <Label htmlFor={`parent-${category.id}`}>親カテゴリ</Label>
             <Select value={editParentId} onValueChange={setEditParentId}>
               <SelectTrigger id={`parent-${category.id}`}>
                 <SelectValue />
@@ -219,7 +212,7 @@ function CategoryRow({
           {category.type === "income" ? "収入" : "支出"}
         </Badge>
         <Badge variant="secondary">
-          {category.parent_id ? "小ジャンル" : "親ジャンル"}
+          {category.parent_id ? "小カテゴリ" : "親カテゴリ"}
         </Badge>
         {category.is_default && <Badge>デフォルト</Badge>}
       </div>
@@ -232,7 +225,7 @@ function CategoryRow({
           disabled={category.is_default}
           title={
             category.is_default
-              ? "デフォルトのジャンルは編集できません"
+              ? "デフォルトのカテゴリは編集できません"
               : undefined
           }
         >
@@ -245,15 +238,15 @@ function CategoryRow({
           onClick={() =>
             startDeleteTransition(() =>
               runActionWithToast(() => deleteCategory(category.id), {
-                success: "ジャンルを削除しました。",
-                error: "ジャンルの削除に失敗しました。",
+                success: "カテゴリを削除しました。",
+                error: "カテゴリの削除に失敗しました。",
               }),
             )
           }
           disabled={category.is_default || isDeleting}
           title={
             category.is_default
-              ? "デフォルトのジャンルは削除できません"
+              ? "デフォルトのカテゴリは削除できません"
               : undefined
           }
         >
@@ -268,13 +261,13 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
   const [createType, setCreateType] = useState<CategoryType>("expense");
   const [createParentId, setCreateParentId] = useState(rootCategory);
   const [orderedCategories, setOrderedCategories] = useState(() =>
-    orderByHierarchy(categories),
+    buildCategoryTreeOptions(categories).map((option) => option.category),
   );
   const [createState, createFormAction, isCreating] = useActionState(
     withToast(createCategoryFromForm, {
       loading: "追加しています…",
-      success: "ジャンルを追加しました。",
-      error: "ジャンルの追加に失敗しました。",
+      success: "カテゴリを追加しました。",
+      error: "カテゴリの追加に失敗しました。",
     }),
     initialState,
   );
@@ -288,7 +281,9 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
   );
 
   useEffect(() => {
-    setOrderedCategories(orderByHierarchy(categories));
+    setOrderedCategories(
+      buildCategoryTreeOptions(categories).map((option) => option.category),
+    );
   }, [categories]);
 
   function handleDragEnd({ active, over }: DragEndEvent) {
@@ -325,8 +320,8 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
       }),
       {
         loading: "更新しています…",
-        success: "ジャンルの並び順を更新しました。",
-        error: "ジャンルの並び順の更新に失敗しました。",
+        success: "カテゴリの並び順を更新しました。",
+        error: "カテゴリの並び順の更新に失敗しました。",
       },
     );
   }
@@ -335,7 +330,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
     <div className="flex flex-col gap-4">
       <Card size="sm">
         <CardHeader>
-          <CardTitle>ジャンルを追加</CardTitle>
+          <CardTitle>カテゴリを追加</CardTitle>
         </CardHeader>
         <CardContent>
           <form
@@ -343,7 +338,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
             className="flex flex-wrap items-end gap-2"
           >
             <div className="flex flex-col gap-1">
-              <Label htmlFor="new-name">ジャンル名</Label>
+              <Label htmlFor="new-name">カテゴリ名</Label>
               <Input id="new-name" name="name" required />
             </div>
             <div className="flex flex-col gap-1">
@@ -366,7 +361,7 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
               <input type="hidden" name="type" value={createType} />
             </div>
             <div className="flex flex-col gap-1">
-              <Label htmlFor="new-parent">親ジャンル</Label>
+              <Label htmlFor="new-parent">親カテゴリ</Label>
               <Select value={createParentId} onValueChange={setCreateParentId}>
                 <SelectTrigger id="new-parent">
                   <SelectValue />
@@ -415,12 +410,12 @@ export function CategoryManager({ categories }: { categories: Category[] }) {
 
       <Card size="sm">
         <CardHeader>
-          <CardTitle>ジャンル一覧</CardTitle>
+          <CardTitle>カテゴリ一覧</CardTitle>
         </CardHeader>
         <CardContent>
           {orderedCategories.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              ジャンルがまだありません。
+              カテゴリがまだありません。
             </p>
           ) : (
             <DndContext

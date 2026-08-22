@@ -24,6 +24,7 @@ import {
   type TransactionFormState,
 } from "@/features/kakei/actions/transactions";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
+import { buildCategoryTreeOptions } from "@/features/kakei/lib/category-tree";
 import { currentDate } from "@/features/kakei/lib/format";
 import { withToast } from "@/features/kakei/lib/toast-action";
 
@@ -68,7 +69,7 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
   }, []);
 
   const categoryOptions = useMemo(
-    () => categories.filter((c) => c.type === type),
+    () => buildCategoryTreeOptions(categories.filter((c) => c.type === type)),
     [categories, type],
   );
 
@@ -98,7 +99,7 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
         >
           <div className="flex flex-col gap-2">
             <Label htmlFor="categoryId">
-              ジャンル
+              カテゴリ
               <span className="text-destructive" aria-hidden="true">
                 *
               </span>
@@ -108,9 +109,9 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
                 <SelectValue placeholder="未分類" />
               </SelectTrigger>
               <SelectContent>
-                {categoryOptions.map((category) => (
+                {categoryOptions.map(({ category, label }) => (
                   <SelectItem key={category.id} value={category.id}>
-                    {category.name}
+                    {label}
                   </SelectItem>
                 ))}
               </SelectContent>
