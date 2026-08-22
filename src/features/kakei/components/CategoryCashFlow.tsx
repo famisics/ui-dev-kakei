@@ -29,8 +29,6 @@ type FlowLink = {
   hidden?: boolean;
 };
 
-const incomeColor = "var(--income)";
-const expenseColor = "var(--expense)";
 const rootColor = "var(--muted-foreground)";
 
 function buildChartData(flow: CategoryCashFlowData) {
@@ -46,11 +44,10 @@ function buildChartData(flow: CategoryCashFlowData) {
 
   const addSide = (groups: CashFlowCategory[], type: "income" | "expense") => {
     for (const group of groups) {
-      const groupColor = type === "income" ? incomeColor : expenseColor;
       const parentIndex = addNode({
         name: group.name,
         detail: `${formatYen(group.total)} · ${(group.ratio * 100).toFixed(1)}%`,
-        color: groupColor,
+        color: group.color,
         kind: "category",
       });
 
@@ -60,13 +57,13 @@ function buildChartData(flow: CategoryCashFlowData) {
               source: parentIndex,
               target: rootIndex,
               value: group.total,
-              color: groupColor,
+              color: group.color,
             }
           : {
               source: rootIndex,
               target: parentIndex,
               value: group.total,
-              color: groupColor,
+              color: group.color,
             },
       );
 
@@ -74,7 +71,7 @@ function buildChartData(flow: CategoryCashFlowData) {
         const childIndex = addNode({
           name: child.name,
           detail: `${formatYen(child.total)} · ${(child.ratio * 100).toFixed(1)}%`,
-          color: groupColor,
+          color: child.color,
           kind: "category",
         });
         links.push(
@@ -83,13 +80,13 @@ function buildChartData(flow: CategoryCashFlowData) {
                 source: childIndex,
                 target: parentIndex,
                 value: child.total,
-                color: groupColor,
+                color: child.color,
               }
             : {
                 source: parentIndex,
                 target: childIndex,
                 value: child.total,
-                color: groupColor,
+                color: child.color,
               },
         );
       }
