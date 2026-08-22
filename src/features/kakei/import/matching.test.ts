@@ -3,6 +3,7 @@ import {
   assignOccurrences,
   findCandidates,
   type ManualTransactionCandidate,
+  mergeSnapshotFiles,
 } from "./matching";
 
 describe("assignOccurrences", () => {
@@ -16,6 +17,50 @@ describe("assignOccurrences", () => {
     expect(assignOccurrences(rows).map((r) => r.occurrence)).toEqual([
       1, 1, 2, 3,
     ]);
+  });
+});
+
+describe("mergeSnapshotFiles", () => {
+  it("重なりのある複数ファイルを統合し、フィンガープリントごとの件数はファイル間の最大値になる", () => {
+    const midMonth = { fileName: "mid.csv", rows: [{ fingerprint: "a" }] };
+    const endMonth = {
+      fileName: "end.csv",
+      rows: [{ fingerprint: "a" }, { fingerprint: "a" }],
+    };
+    const merged = mergeSnapshotFiles([midMonth, endMonth]);
+    expect(
+      merged.map((r) => ({ occurrence: r.occurrence, fileName: r.fileName })),
+    ).toEqual([
+      { occurrence: 1, fileName: "mid.csv" },
+      { occurrence: 2, fileName: "end.csv" },
+    ]);
+  });
+
+  it("重なりのない複数ファイルはそのまま両方残る", () => {
+    const fileA = { fileName: "a.csv", rows: [{ fingerprint: "a" }] };
+    const fileB = { fileName: "b.csv", rows: [{ fingerprint: "b" }] };
+    const merged = mergeSnapshotFiles([fileA, fileB]);
+    expect(merged).toEqual([
+      { fingerprint: "a", occurrence: 1, fileName: "a.csv" },
+      { fingerprint: "b", occurrence: 1, fileName: "b.csv" },
+    ]);
+  });
+
+  it("同一ファイルを重複して選択した場合は完全に統合される", () => {
+    const file = { fileName: "same.csv", rows: [{ fingerprint: "a" }] };
+    const merged = mergeSnapshotFiles([file, file]);
+    expect(merged).toEqual([
+      { fingerprint: "a", occurrence: 1, fileName: "same.csv" },
+    ]);
+  });
+
+  it("1ファイル内に重複フィンガープリントがあってもファイル内の出現順で採番される", () => {
+    const file = {
+      fileName: "dup.csv",
+      rows: [{ fingerprint: "a" }, { fingerprint: "a" }],
+    };
+    const merged = mergeSnapshotFiles([file]);
+    expect(merged.map((r) => r.occurrence)).toEqual([1, 2]);
   });
 });
 

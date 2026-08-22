@@ -15,6 +15,30 @@ export function assignOccurrences<T extends { fingerprint: string }>(
   });
 }
 
+/**
+ * 同じ取込元に複数の累積スナップショットファイルをまとめて取り込む際、
+ * ファイルごとに occurrence を採番したうえで (fingerprint, occurrence) の
+ * 組でファイル選択順に重複排除して1つの明細リストに統合する。
+ * 各ファイル内の occurrence は 1 始まりの連番なので、この重複排除により
+ * フィンガープリントごとの件数はファイル間の最大値（＝出現番号の和集合）になる。
+ */
+export function mergeSnapshotFiles<T extends { fingerprint: string }>(
+  files: { fileName: string; rows: T[] }[],
+): (T & { occurrence: number; fileName: string })[] {
+  const seen = new Set<string>();
+  const merged: (T & { occurrence: number; fileName: string })[] = [];
+  for (const file of files) {
+    const withOccurrence = assignOccurrences(file.rows);
+    for (const row of withOccurrence) {
+      const key = `${row.fingerprint}:${row.occurrence}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push({ ...row, fileName: file.fileName });
+    }
+  }
+  return merged;
+}
+
 export type ManualTransactionCandidate = {
   id: string;
   date: string;
