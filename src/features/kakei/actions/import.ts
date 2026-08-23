@@ -435,7 +435,55 @@ export async function confirmImportBatch(
   if (categoriesError) throw categoriesError;
   const validCategoryIds = new Set(categories.map((c) => c.id));
 
-  const linkTransactionIds = rows
+  const validRows = rows.filter(
+    (row) =>
+      IMPORT_DATE_RE.test(row.date) &&
+      Number.isFinite(row.amount) &&
+      row.amount > 0 &&
+      (row.type === "income" || row.type === "expense"),
+  );
+
+  const rowKeys = new Map(
+    validRows.map((row) => {
+      const fingerprint = computeFingerprint(
+        row.date,
+        row.amount,
+        row.type,
+        row.description,
+      );
+      const entryKey = computeEntryKey({
+        importSourceId,
+        fingerprint,
+        occurrence: row.occurrence,
+      });
+      return [row, { fingerprint, entryKey }] as const;
+    }),
+  );
+
+  let existingEntryKeys = new Set<string>();
+  if (rowKeys.size > 0) {
+    const { data: existingEntries, error: existingEntriesError } =
+      await supabase
+        .from("statement_entries")
+        .select("entry_key")
+        .eq("user_id", userId)
+        .eq("import_source_id", importSourceId)
+        .in(
+          "entry_key",
+          Array.from(rowKeys.values(), ({ entryKey }) => entryKey),
+        );
+    if (existingEntriesError) throw existingEntriesError;
+    existingEntryKeys = new Set(existingEntries.map((e) => e.entry_key));
+  }
+
+  const unregisteredRows = validRows.filter((row) => {
+    const keys = rowKeys.get(row);
+    if (!keys) throw new Error("行に対応するentry_keyが見つかりませんでした。");
+    return !existingEntryKeys.has(keys.entryKey);
+  });
+  const preDuplicateCount = validRows.length - unregisteredRows.length;
+
+  const linkTransactionIds = unregisteredRows
     .filter((row) => row.action.kind === "link")
     .map(
       (row) =>
@@ -476,14 +524,6 @@ export async function confirmImportBatch(
     alreadyLinkedIds = new Set(linked.map((e) => e.transaction_id));
   }
 
-  const validRows = rows.filter(
-    (row) =>
-      IMPORT_DATE_RE.test(row.date) &&
-      Number.isFinite(row.amount) &&
-      row.amount > 0 &&
-      (row.type === "income" || row.type === "expense"),
-  );
-
   type ResolvedRow = {
     row: ConfirmImportRow;
     kind: "link" | "create";
@@ -494,7 +534,7 @@ export async function confirmImportBatch(
   const descriptionBackfills: { transactionId: string; description: string }[] =
     [];
 
-  for (const row of validRows) {
+  for (const row of unregisteredRows) {
     if (row.action.kind === "link") {
       const candidate = candidatesById.get(row.action.transactionId);
       const isValidCandidate =
@@ -579,23 +619,16 @@ export async function confirmImportBatch(
   }
 
   const entries = resolvedRows.map(({ row, kind, transactionId }) => {
-    const fingerprint = computeFingerprint(
-      row.date,
-      row.amount,
-      row.type,
-      row.description,
-    );
+    const keys = rowKeys.get(row);
+    if (!keys) throw new Error("行に対応するentry_keyが見つかりませんでした。");
+    const { fingerprint, entryKey } = keys;
     return {
       kind,
       entry: {
         user_id: userId,
         import_source_id: importSourceId,
         transaction_id: transactionId as string,
-        entry_key: computeEntryKey({
-          importSourceId,
-          fingerprint,
-          occurrence: row.occurrence,
-        }),
+        entry_key: entryKey,
         fingerprint,
         occurrence: row.occurrence,
         date: row.date,
@@ -608,7 +641,7 @@ export async function confirmImportBatch(
 
   let matchedCount = 0;
   let createdCount = 0;
-  let duplicateCount = rows.length - validRows.length;
+  let duplicateCount = rows.length - validRows.length + preDuplicateCount;
 
   if (entries.length > 0) {
     const { data: insertedEntries, error: entriesError } = await supabase
