@@ -24,21 +24,23 @@ export async function buildImportSourceLinksByTransactionId(
     supabase
       .from("statement_entries")
       .select("transaction_id, import_source_id")
-      .eq("user_id", userId)
-      .in("transaction_id", transactionIds),
+      .eq("user_id", userId),
     supabase.from("import_sources").select("id, name").eq("user_id", userId),
   ]);
   if (entriesError) throw entriesError;
   if (sourcesError) throw sourcesError;
 
+  const transactionIdSet = new Set(transactionIds);
   const sourceNameById = new Map(sources.map((s) => [s.id, s.name]));
   return new Map(
-    entries.map((e) => [
-      e.transaction_id,
-      {
-        importSourceId: e.import_source_id,
-        importSourceName: sourceNameById.get(e.import_source_id) ?? null,
-      },
-    ]),
+    entries
+      .filter((e) => transactionIdSet.has(e.transaction_id))
+      .map((e) => [
+        e.transaction_id,
+        {
+          importSourceId: e.import_source_id,
+          importSourceName: sourceNameById.get(e.import_source_id) ?? null,
+        },
+      ]),
   );
 }
