@@ -9,6 +9,7 @@ const navigation = [
   { href: "/", label: "トップ" },
   { href: "/categories", label: "カテゴリ管理" },
   { href: "/import-sources", label: "カード管理" },
+  { href: "/duplicates", label: "重複削除" },
 ];
 
 export function AppHeader() {
