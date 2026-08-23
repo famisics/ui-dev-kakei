@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import type { CategoryType, Transaction } from "@/features/kakei/db/types";
+import { buildImportSourceLinksByTransactionId } from "@/features/kakei/lib/import-source-map";
 import { nextTopSortOrder } from "@/features/kakei/lib/sort-order";
 import { getAuthedUserId } from "@/lib/supabase/auth";
 import { POSTGRES_ERROR_CODE } from "@/lib/supabase/postgres-errors";
@@ -38,36 +39,18 @@ export async function listTransactionsForMonth(
 
   if (data.length === 0) return [];
 
-  const [
-    { data: entries, error: entriesError },
-    { data: sources, error: sourcesError },
-  ] = await Promise.all([
-    supabase
-      .from("statement_entries")
-      .select("transaction_id, import_source_id")
-      .eq("user_id", userId)
-      .in(
-        "transaction_id",
-        data.map((t) => t.id),
-      ),
-    supabase.from("import_sources").select("id, name").eq("user_id", userId),
-  ]);
-  if (entriesError) throw entriesError;
-  if (sourcesError) throw sourcesError;
-
-  const sourceIdByTransactionId = new Map(
-    entries.map((e) => [e.transaction_id, e.import_source_id]),
+  const importSourceLinks = await buildImportSourceLinksByTransactionId(
+    supabase,
+    userId,
+    data.map((t) => t.id),
   );
-  const sourceNameById = new Map(sources.map((s) => [s.id, s.name]));
 
   return data.map((t) => {
-    const sourceId = sourceIdByTransactionId.get(t.id) ?? t.import_source_id;
+    const link = importSourceLinks.get(t.id);
     return {
       ...t,
-      importSourceId: sourceId ?? null,
-      importSourceName: sourceId
-        ? (sourceNameById.get(sourceId) ?? null)
-        : null,
+      importSourceId: link?.importSourceId ?? t.import_source_id,
+      importSourceName: link?.importSourceName ?? null,
     };
   });
 }
