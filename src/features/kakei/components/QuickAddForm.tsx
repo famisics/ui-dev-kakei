@@ -23,8 +23,10 @@ import {
   createTransactionFromForm,
   type TransactionFormState,
 } from "@/features/kakei/actions/transactions";
+import { FormSubmitButton } from "@/features/kakei/components/FormSubmitButton";
 import type { Category, CategoryType } from "@/features/kakei/db/types";
 import { buildCategoryTreeOptions } from "@/features/kakei/lib/category-tree";
+import { submitFormOnCmdEnter } from "@/features/kakei/lib/form-shortcuts";
 import { currentDate } from "@/features/kakei/lib/format";
 import { withToast } from "@/features/kakei/lib/toast-action";
 
@@ -90,12 +92,7 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
         <form
           action={formAction}
           className="flex flex-col gap-3"
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault();
-              event.currentTarget.requestSubmit();
-            }
-          }}
+          onKeyDown={submitFormOnCmdEnter}
         >
           <div className="flex flex-col gap-2">
             <Label htmlFor="categoryId">
@@ -167,9 +164,7 @@ export function QuickAddForm({ categories }: { categories: Category[] }) {
             <p className="text-sm text-destructive">{state.message}</p>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
-              保存
-            </Button>
+            <FormSubmitButton disabled={isPending}>保存</FormSubmitButton>
           </DialogFooter>
         </form>
       </DialogContent>
