@@ -237,7 +237,22 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
       "UNCLUTTER",
       "PIXIV",
       "クリプトン",
+      "ABLETON AG"
     ],
+  },
+  {
+    key: "hobby",
+    name: "趣味",
+    type: "expense",
+    color: "#ef4444",
+    parentKey: "entertainment",
+  },
+  {
+    key: "hobby_music",
+    name: "趣味(音楽)",
+    type: "expense",
+    color: "#ef4444",
+    parentKey: "entertainment",
   },
   {
     key: "travel",
@@ -276,6 +291,16 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
     ],
   },
   {
+    key: "event",
+    name: "イベント",
+    type: "expense",
+    color: "#ef4444",
+    parentKey: "entertainment",
+    importKeywords: [
+      "ｻﾞｲｺｶﾌﾞｼｷｶﾞｲｼｬ",
+    ]
+  },
+  {
     key: "expensive_goods",
     name: "高額製品",
     type: "expense",
@@ -296,6 +321,13 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
     color: "#eab308",
     parentKey: "other_expense",
   },
+  {
+    key: "refund",
+    name: "払い戻し",
+    type: "expense",
+    color: "#eab308",
+    parentKey: "other_expense",
+  },
   { key: "salary", name: "給与", type: "income", color: "#3b82f6" },
   { key: "remittance", name: "仕送り", type: "income", color: "#a855f7" },
   { key: "windfall", name: "臨時収入", type: "income", color: "#a855f7" },
@@ -303,6 +335,13 @@ export const DEFAULT_CATEGORIES: DefaultCategoryDef[] = [
   {
     key: "reimbursement_income",
     name: "立て替え",
+    type: "income",
+    color: "#eab308",
+    parentKey: "other_income",
+  },
+  {
+    key: "refund_income",
+    name: "払い戻し",
     type: "income",
     color: "#eab308",
     parentKey: "other_income",

@@ -17,3 +17,11 @@
 
 - `accounts.kind` に `investment` 等を追加する。
 - `account_balances`: `id`, `user_id`, `account_id`, `month`(YYYY-MM), `balance`
+
+## 日付だけでなく、時間も保持するように
+
+→ 元データに時間情報がないので無理
+
+## 重複を削除できる機能を実装して
+
+## 取引の編集と保存を、cmd+enterで
